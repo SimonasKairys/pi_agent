@@ -1,0 +1,175 @@
+-----------------------------------------------
+Diegimas nuo nulio: ubuntu server 24.04 (raspberry pi 5), botas veikia kaip atskiras
+vartotojas piagent be sudo teisiu, apribotas systemd.
+Komandas rasykite po vieną. Nekopijuokite eiluciu ```.
+-----------------------------------------------
+ubuntu server, connect to it:
+	ssh your_username@your_hostname.local
+-----------------------------------------------
+update if need:
+	sudo apt update && sudo apt upgrade -y
+	sudo reboot
+(po reboot prisijunkite is naujo)
+-----------------------------------------------
+Prepare the Python Environment
+	sudo apt install git python3-pip python3-venv -y
+-----------------------------------------------
+Sukurkite vartotoja piagent (be sudo, be slaptazodzio):
+	sudo adduser --disabled-password --gecos "" piagent
+	sudo chmod 700 /home/piagent
+Patikrinkite, kad zodzio sudo nera:
+	id piagent
+-----------------------------------------------
+Prieigos raktas prie GitHub (deploy key, tik skaitymas, saugykla privati):
+	sudo -u piagent mkdir -m 700 /home/piagent/.ssh
+	sudo -u piagent ssh-keygen -t ed25519 -N "" -C "raspi-deploy-key" -f /home/piagent/.ssh/id_ed25519
+	sudo cat /home/piagent/.ssh/id_ed25519.pub
+Nukopijuokite visa eilute (ssh-ed25519 ... raspi-deploy-key) i GitHub:
+	https://github.com/SimonasKairys/pi_agent/settings/keys
+	Add deploy key, Title: raspi, Allow write access NEZYMETI, Add key.
+Patikrinkite rysi:
+	sudo -u piagent ssh -o StrictHostKeyChecking=accept-new -T git@github.com
+(turi buti: Hi SimonasKairys/pi_agent! You've successfully authenticated ...)
+Privataus rakto (failas be .pub) niekur nesiuskite.
+Kuriant nauja raktą (pvz. po SD korteles gedimo), sena raktą pasalinkite tame pačiame GitHub
+puslapyje (Delete prie seno rakto).
+-----------------------------------------------
+Nuklonuokite projekta (aplankas turi buti tuscias arba neegzistuoti):
+	sudo -u piagent git clone git@github.com:SimonasKairys/pi_agent.git /home/piagent/telegram-agent
+Jei aplankas jau yra, pirma pervadinkite:
+	sudo -u piagent mv /home/piagent/telegram-agent /home/piagent/telegram-agent.old
+GitHub saugykloje yra bot.py, .gitignore ir docs/ (dokumentai). .env ir dev/ nekeliami.
+Kad docs/ neatsirastu Raspberry Pi (kiti failai ir nauji aplankai isskleidziami kaip ipratai):
+	sudo -u piagent git -C /home/piagent/telegram-agent sparse-checkout set --no-cone '/*' '!/docs/'
+Nustatymas vietinis: klonuodami is naujo, komanda pakartokite. Patikrinkite:
+	sudo -u piagent ls /home/piagent/telegram-agent
+(docs/ neturi buti)
+-----------------------------------------------
+set up the virtual environment
+	sudo -u piagent python3 -m venv /home/piagent/telegram-agent/venv
+Jei turite sena venv is telegram-agent.old, galite ja perkelti ir pip install praleisti:
+	sudo -u piagent mv /home/piagent/telegram-agent.old/venv /home/piagent/telegram-agent/venv
+-----------------------------------------------
+Install the libraries (telegram, openrouter, dotenv):
+	sudo -u piagent /home/piagent/telegram-agent/venv/bin/pip install python-telegram-bot openai python-dotenv
+	telegram api: gaunamas is @BotFather (/newbot)
+	openrouter api: openrouter.ai raktu skiltyje
+	model_name: deepseek/deepseek-v4.1-flash
+-----------------------------------------------
+bot.py ateina is GitHub (klonavimas aukstiau), jo kurti ranka nereikia.
+Failas .env i GitHub nekeliamas: raktai Raspberry Pi laikomi /etc/piagent/env.
+-----------------------------------------------
+Slaptus raktus laikykite ne agento kataloge, o root failu.
+Create the secrets file:
+	sudo mkdir -p /etc/piagent
+	sudo nano /etc/piagent/env
+
+Paste (be kabuciu, be tarpu aplink =, savo reiksmes):
+OPENROUTER_API_KEY=jusu_openrouter_raktas
+TELEGRAM_BOT_TOKEN=jusu_telegram_tokenas
+TELEGRAM_ALLOWED_USER_IDS=111111,222222
+
+Apribokite teises:
+	sudo chown root:root /etc/piagent/env
+	sudo chmod 600 /etc/piagent/env
+Patikrinkite (rodo tik pavadinimus):
+	sudo cut -d= -f1 /etc/piagent/env
+Savo Telegram ID sužinosite parašę botui @userinfobot.
+-----------------------------------------------
+Create the service file:
+	sudo nano /etc/systemd/system/piagent.service
+
+Paste:
+[Unit]
+Description=Pi agent Telegram bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=piagent
+Group=piagent
+WorkingDirectory=/home/piagent/telegram-agent
+ExecStart=/home/piagent/telegram-agent/venv/bin/python bot.py
+EnvironmentFile=/etc/piagent/env
+Restart=on-failure
+RestartSec=5
+
+ProtectSystem=strict
+ReadWritePaths=/home/piagent
+ProtectHome=tmpfs
+BindPaths=/home/piagent
+InaccessiblePaths=/root /media /mnt /srv
+
+PrivateTmp=true
+PrivateDevices=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
+
+Check the file:
+	sudo systemd-analyze verify /etc/systemd/system/piagent.service
+(jei nieko neisveda, failas geras)
+-----------------------------------------------
+Start the bot (paleidzia dabar ir po kiekvieno reboot):
+	sudo systemctl daemon-reload
+	sudo systemctl enable --now piagent
+Check:
+	sudo systemctl is-active piagent
+(turi buti: active)
+-----------------------------------------------
+Test: parasykite botui Telegram /start, tada bet koki klausima.
+-----------------------------------------------
+Jei neveikia:
+	sudo journalctl -u piagent -n 50 --no-pager
+	KeyError 'OPENROUTER_API_KEY' -> blogas /etc/piagent/env
+	No module named ... -> pakartokite pip install
+	Permission denied (publickey) klonuojant -> deploy key nepridetas arba ne visas
+	Conflict: terminated by other getUpdates -> tas pats botas veikia kitur
+-----------------------------------------------
+Atnaujinimas po pakeitimu (kompiuteryje: git add, git commit, git push):
+	sudo -u piagent git -C /home/piagent/telegram-agent pull
+	sudo systemctl restart piagent
+	sudo systemctl is-active piagent
+Nepavyksta pull (vietiniai pakeitimai): sudo -u piagent git -C /home/piagent/telegram-agent status
+Kompiuteryje kurimo failus laikykite dev/ (jis ignoruojamas), kiti nauji failai keliami i GitHub.
+-----------------------------------------------
+Kasdienes komandos:
+	sudo systemctl status piagent --no-pager
+	sudo journalctl -u piagent -f       (isejimas: Ctrl+C)
+	sudo systemctl restart piagent      (po bot.py ar env pakeitimu)
+	sudo systemctl stop piagent
+-----------------------------------------------
+Check the limits (turi buti: rasymas tik /home/piagent, sudo neveikia):
+	sudo tee /tmp/piagent-test.sh > /dev/null <<-'EOF'
+	echo "kas as: $(whoami)"
+	touch /home/piagent/testas && echo "namai: PAVYKO" || echo "namai: NEPAVYKO"
+	touch /etc/testas 2>/dev/null && echo "etc: PAVYKO (blogai)" || echo "etc: NEPAVYKO (gerai)"
+	touch /usr/testas 2>/dev/null && echo "usr: PAVYKO (blogai)" || echo "usr: NEPAVYKO (gerai)"
+	echo "namai: $(ls /home | tr '\n' ' ')"
+	ls /media >/dev/null 2>&1 && echo "media: matoma" || echo "media: nepasiekiama (gerai)"
+	sudo -n true 2>/dev/null && echo "sudo: VEIKIA (blogai)" || echo "sudo: neveikia (gerai)"
+	rm -f /home/piagent/testas
+	EOF
+	sudo chmod 644 /tmp/piagent-test.sh
+	sudo systemd-run --wait --pipe --uid=piagent -p ProtectSystem=strict -p ReadWritePaths=/home/piagent -p ProtectHome=tmpfs -p BindPaths=/home/piagent -p InaccessiblePaths="/root /media /mnt /srv" bash /tmp/piagent-test.sh
+	sudo rm /tmp/piagent-test.sh
+-----------------------------------------------
+Backup (SD korteles gali sugesti): kodo kopija yra GitHub (git push). GitHub neapima
+/etc/piagent/env (raktai), /etc/systemd/system/piagent.service ir venv: raktus
+issaugokite slaptazodziu tvarkykleje, o venv ir paslauga atkuriama pagal sio failo zingsnius.
+Jei reikia pilnos kopijos su duomenimis:
+	sudo tar czf ~/piagent-backup-$(date +%F).tar.gz -C /home/piagent telegram-agent
+Savo kompiuteryje:
+	scp your_username@your_hostname.local:~/piagent-backup-*.tar.gz .
+Failuose gali buti duomenu, saugokite privaciai. Raktu archyve nera (jie /etc/piagent/env).
+-----------------------------------------------
