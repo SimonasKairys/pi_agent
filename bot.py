@@ -7,6 +7,8 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from openai import AsyncOpenAI
 
 logging.basicConfig(level=logging.INFO)
+# httpx logs full request URLs, which include the Telegram bot token.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 OPENROUTER_API_KEY = os.environ["OPENROUTER_API_KEY"]
