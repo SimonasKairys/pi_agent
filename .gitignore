@@ -1,0 +1,10 @@
+# Slaptos reikšmės (Raspberry Pi naudoja /etc/piagent/env)
+.env
+
+# Kūrimo failai: nekeliami į Raspberry Pi
+dev/
+
+# Python
+venv/
+__pycache__/
+*.pyc
