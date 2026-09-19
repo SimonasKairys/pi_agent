@@ -8,3 +8,10 @@ dev/
 venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# Duomenys: kuriami veikimo metu, į GitHub nekeliami
+*.db
+*.db-wal
+*.db-shm
+logs/
