@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 MAX_LIST_EVENTS = 50
 MAX_INTERVAL_DAYS = 90
 MAX_DESCRIPTION_LENGTH = 2000
-MAX_USER_DAILY_EVENTS = 20
 
 
 def parse_date_input(
@@ -452,7 +451,11 @@ def create_event(
             if not google_event_id:
                 google_event_id = resp.get("id")
         if not google_event_id:
-            google_event_id = f"g_evt_{int(datetime.now().timestamp())}"
+            # Be tikro Google identifikatoriaus įvykis niekada nesusietų su
+            # list_events rezultatu ir taptų nepasiekiamas keisti ar trinti.
+            raise RuntimeError(
+                "Kalendorius negrąžino įvykio identifikatoriaus, todėl įvykis neįrašytas."
+            )
 
         created_at_str = datetime.now(zoneinfo.ZoneInfo(timezone_str)).isoformat()
 
@@ -583,11 +586,16 @@ def update_event(
             (event_id,),
         ).fetchone()
 
-        if row is None or row["deleted_at"] is not None:
-            raise ValueError(f"Įvykis Nr. {event_id} nerastas arba jau ištrintas")
-
-        if row["user_id"] != user_id:
-            raise ValueError("Galima keisti tik savo sukurtą įvykį")
+        if (
+            row is None
+            or row["deleted_at"] is not None
+            or row["user_id"] != user_id
+        ):
+            # Vienodas tekstas abiem atvejais: kitaip skirtumas atskleistų,
+            # ar svetimas įvykio numeris egzistuoja.
+            raise ValueError(
+                f"Įvykis Nr. {event_id} nerastas. Galima keisti tik savo sukurtus įvykius."
+            )
 
         google_event_id = row["google_event_id"]
         if not google_event_id:
@@ -606,9 +614,14 @@ def update_event(
                 att_uid = ar["user_id"]
                 try:
                     u = get_user_by_id(att_uid)
-                    attendee_emails.append(u.email)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    # PATCH_EVENT pakeičia visą sąrašą. Praleidus dalyvį jis
+                    # dingtų iš Google, o event_attendees liktų nepakitusi.
+                    raise ValueError(
+                        f"Įvykio Nr. {event_id} dalyvis nebėra vartotojų sąraše, "
+                        "todėl įvykio keisti negalima. Kreipkitės į administratorių."
+                    ) from exc
+                attendee_emails.append(u.email)
         else:
             update_db_attendees = True
             if not isinstance(attendees, list):
@@ -749,11 +762,16 @@ def delete_event(
             (event_id,),
         ).fetchone()
 
-        if row is None or row["deleted_at"] is not None:
-            raise ValueError(f"Įvykis Nr. {event_id} nerastas arba jau ištrintas")
-
-        if row["user_id"] != user_id:
-            raise ValueError("Galima trinti tik savo sukurtą įvykį")
+        if (
+            row is None
+            or row["deleted_at"] is not None
+            or row["user_id"] != user_id
+        ):
+            # Vienodas tekstas abiem atvejais: kitaip skirtumas atskleistų,
+            # ar svetimas įvykio numeris egzistuoja.
+            raise ValueError(
+                f"Įvykis Nr. {event_id} nerastas. Galima trinti tik savo sukurtus įvykius."
+            )
 
         google_event_id = row["google_event_id"]
         if not google_event_id:

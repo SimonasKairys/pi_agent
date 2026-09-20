@@ -61,7 +61,9 @@ def test_unknown_name_raises_error():
 def test_unknown_email_raises_error():
     with pytest.raises((UnknownUserError, ConfigError, KeyError)) as exc_info:
         email_to_name("svetimas@example.com", users=SAMPLE_USERS)
-    assert "svetimas@example.com" in str(exc_info.value)
+    # El. pašto adresas neturi patekti į klaidos tekstą: jis gali pasiekti modelį.
+    assert "svetimas@example.com" not in str(exc_info.value)
+    assert "@" not in str(exc_info.value)
 
 
 def test_get_user_helpers():

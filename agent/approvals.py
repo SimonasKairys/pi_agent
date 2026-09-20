@@ -110,6 +110,8 @@ def format_approval_card(
         names = ", ".join(arguments["attendees"]) if count > 0 else "nėra"
         lines.append(f"• **Dalyvių skaičius**: {count} ({names})")
 
+    if "attendee_count" in arguments and not any("Dalyvi" in ln for ln in lines):
+        lines.append(f"• Dalyvių: {arguments['attendee_count']}")
     lines.append(f"\n_Patvirtinimas galioja {APPROVAL_EXPIRY_MINUTES} min._")
     text = "\n".join(lines)
 
@@ -217,16 +219,87 @@ def process_approval_action(
 async def execute_approved_action(
     approval_info: dict[str, Any],
     tool_registry: ToolRegistry,
-    get_lock_fn: Callable[[int], asyncio.Lock] | None = None,
+    get_lock_fn: Callable[[int], asyncio.Lock],
 ) -> str:
-    """Executes confirmed tool holding the user lock."""
+    """Executes confirmed tool holding the user lock.
+
+    get_lock_fn is required: TASK.md says an approved action runs under the same
+    per-user lock as an ordinary request, so running without one must be
+    impossible rather than merely discouraged.
+    """
     user_id = approval_info["user_id"]
     tool_name = approval_info["tool_name"]
     arguments = approval_info["arguments"]
 
-    if get_lock_fn is not None:
-        lock = get_lock_fn(user_id)
-        async with lock:
-            return await tool_registry.execute(tool_name, arguments)
+    lock = get_lock_fn(user_id)
+    async with lock:
+        return await tool_registry.execute(tool_name, arguments)
 
-    return await tool_registry.execute(tool_name, arguments)
+
+def enrich_arguments(
+    conn: sqlite3.Connection,
+    tool_name: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    """Fills in time and attendee count for the approval card.
+
+    update_event and delete_event arguments carry only event_id, so the card
+    must read the stored event instead of trusting what the model passed.
+    """
+    if tool_name not in ("update_event", "delete_event"):
+        return arguments
+
+    event_id = arguments.get("event_id")
+    if event_id is None:
+        return arguments
+
+    enriched = dict(arguments)
+    row = conn.execute(
+        "SELECT title, starts_at FROM events WHERE id = ? AND deleted_at IS NULL",
+        (event_id,),
+    ).fetchone()
+    if row is not None:
+        enriched.setdefault("title", row["title"])
+        enriched.setdefault("start", row["starts_at"])
+
+    count = conn.execute(
+        "SELECT COUNT(*) AS c FROM event_attendees WHERE event_id = ?", (event_id,)
+    ).fetchone()
+    enriched["attendee_count"] = int(count["c"]) if count else 0
+    return enriched
+
+
+def expire_stale_approvals(
+    conn: sqlite3.Connection,
+    now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """Marks timed-out approvals as expired and returns them.
+
+    Without this, a card nobody clicks stays 'pending' forever: the lazy check
+    inside process_approval_action only runs when somebody presses a button.
+    """
+    now_utc = now or datetime.now(timezone.utc)
+    rows = conn.execute(
+        "SELECT id, user_id, chat_id, message_id, tool_name, expires_at "
+        "FROM pending_approvals WHERE status = 'pending'"
+    ).fetchall()
+
+    expired: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            exp = datetime.fromisoformat(row["expires_at"])
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            exp = now_utc - timedelta(seconds=1)
+        if now_utc > exp:
+            cur = conn.execute(
+                "UPDATE pending_approvals SET status = 'expired' "
+                "WHERE id = ? AND status = 'pending'",
+                (row["id"],),
+            )
+            if cur.rowcount == 1:
+                expired.append(dict(row))
+    if expired:
+        conn.commit()
+    return expired

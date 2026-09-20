@@ -32,6 +32,12 @@ ERROR_MESSAGE = "Atsiprašome, įvyko klaida apdorojant jūsų užklausą. Paban
 USER_LIMIT_EXCEEDED_MESSAGE = "Viršyta jūsų dienos naudojimo riba ({riba} USD). Bandykite rytoj."
 SYSTEM_LIMIT_EXCEEDED_MESSAGE = "Viršyta bendra sistemos dienos naudojimo riba ({riba} USD). Bandykite rytoj."
 EVENT_LIMIT_EXCEEDED_MESSAGE = "Viršyta jūsų dienos įvykių kūrimo riba ({riba}). Bandykite rytoj."
+APPROVAL_PENDING_MESSAGE = (
+    "Veiksmas laukia patvirtinimo. Paspauskite mygtuką žinutėje aukščiau."
+)
+APPROVAL_EXPIRED_MESSAGE = (
+    "⌛ Patvirtinimo laikas baigėsi, veiksmas atmestas."
+)
 BUSY_MESSAGE = "Jūsų ankstesnė užklausa dar vykdoma. Prašome palaukti."
 
 

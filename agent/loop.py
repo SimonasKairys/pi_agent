@@ -117,6 +117,7 @@ async def run_loop(
     max_duration: float = MAX_REQUEST_DURATION_SECONDS,
     max_tokens: int = MAX_TOTAL_TOKENS,
     sleep_fn: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    approval_hook: Callable[..., Awaitable[str | None]] | None = None,
 ) -> LoopResult:
     """Executes ReAct reasoning loop until final answer or limit reached."""
     if run_id is None:
@@ -322,6 +323,24 @@ async def run_loop(
 
             tool = tool_registry.get(name)
             is_read_only = (tool.risk == "read_only") if tool else True
+
+            # Rašantys veiksmai gali reikalauti vartotojo patvirtinimo. Tada
+            # įrankis NEVYKDOMAS, o modeliui grąžinamas paaiškinimas.
+            if approval_hook is not None:
+                pending_note = await approval_hook(
+                    name,
+                    args_dict,
+                    tool.risk if tool else "read_only",
+                    naudotas_internetas,
+                )
+                if pending_note is not None:
+                    loop_messages.append({
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "name": name,
+                        "content": clean_tool_result(pending_note, tool_name=name),
+                    })
+                    continue
 
             result_str = ""
             if is_read_only:

@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from agent.config import User
-from agent.db import get_connection, LimitExceededError
+from agent.db import get_current_day, get_connection, LimitExceededError
 from agent.tools.calendar import (
     CREATE_EVENT_TOOL,
     create_event,
@@ -171,9 +171,12 @@ def test_create_event_enforces_daily_limit(setup_db):
     fake_client = FakeComposioClient()
 
     # Pre-populate usage with 20 events created today
+    # get_current_day() dirba Europe/Vilnius zona. SQLite strftime('now') yra
+    # UTC, todėl naktį tarp abiejų vidurnakčių testas rodytų kitą dieną.
     conn.execute(
         "INSERT INTO usage (user_id, day, cost_usd, events_created) "
-        "VALUES (101, strftime('%Y-%m-%d', 'now'), 0.1, 20)"
+        "VALUES (101, ?, 0.1, 20)",
+        (get_current_day(),),
     )
     conn.commit()
 

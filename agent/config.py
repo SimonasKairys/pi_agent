@@ -176,7 +176,7 @@ def email_to_name(
         if u.email.lower() == email_clean:
             return u.name
 
-    raise UnknownUserError(f"Vartotojas su el. paštu '{email}' nerastas")
+    raise UnknownUserError("Vartotojas su nurodytu el. pašto adresu nerastas")
 
 
 def get_user_by_name(
@@ -213,7 +213,7 @@ def get_user_by_email(
         if u.email.lower() == email_clean:
             return u
 
-    raise UnknownUserError(f"Vartotojas su el. paštu '{email}' nerastas")
+    raise UnknownUserError("Vartotojas su nurodytu el. pašto adresu nerastas")
 
 
 def get_user_by_id(

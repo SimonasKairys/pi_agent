@@ -13,6 +13,7 @@ from typing import Any
 from telegram import Update
 from telegram.ext import (
     Application,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -27,10 +28,21 @@ from agent.db import (
     record_usage,
     LimitExceededError,
 )
+from agent.approvals import (
+    create_pending_approval,
+    enrich_arguments,
+    execute_approved_action,
+    expire_stale_approvals,
+    format_approval_card,
+    needs_approval,
+    process_approval_action,
+)
 from agent.journal import record_journal_entry
 from agent.llm import LLMClient
 from agent.loop import run_loop
 from agent.prompts import (
+    APPROVAL_EXPIRED_MESSAGE,
+    APPROVAL_PENDING_MESSAGE,
     ERROR_MESSAGE,
     START_MESSAGE,
     UNAUTHORIZED_MESSAGE,
@@ -229,6 +241,93 @@ def get_default_registry(
     return registry
 
 
+def make_approval_hook(update: Update, conn: Any, user: User):
+    """Returns a run_loop hook that turns a write action into a confirmation card.
+
+    Returning a string tells the loop not to execute the tool.
+    """
+    async def hook(tool_name, arguments, risk, naudotas_internetas):
+        if not needs_approval(tool_name, naudotas_internetas, risk):
+            return None
+
+        shown = enrich_arguments(conn, tool_name, arguments)
+        approval_id = create_pending_approval(
+            conn,
+            user_id=user.telegram_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            chat_id=update.effective_chat.id if update.effective_chat else None,
+        )
+        text, keyboard = format_approval_card(approval_id, tool_name, shown)
+        sent = await update.message.reply_text(
+            text, reply_markup=keyboard, parse_mode="Markdown"
+        )
+        conn.execute(
+            "UPDATE pending_approvals SET message_id = ? WHERE id = ?",
+            (getattr(sent, "message_id", None), approval_id),
+        )
+        conn.commit()
+        return APPROVAL_PENDING_MESSAGE
+
+    return hook
+
+
+async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles Tvirtinti / Atmesti button presses."""
+    query = update.callback_query
+    if query is None or not query.data:
+        return
+
+    try:
+        action, raw_id = query.data.split(":", 1)
+        approval_id = int(raw_id)
+    except (ValueError, AttributeError):
+        await query.answer(ERROR_MESSAGE)
+        return
+
+    user = get_authorized_user(query.from_user.id) if query.from_user else None
+    if user is None:
+        await query.answer(UNAUTHORIZED_MESSAGE, show_alert=True)
+        return
+
+    conn = get_connection()
+    try:
+        success, message, info = process_approval_action(
+            conn, approval_id, action, query.from_user.id
+        )
+        await query.answer(message, show_alert=not success)
+
+        if success and action == "approve" and info is not None:
+            # Tas pats registro parinkimas kaip _answer: kitaip patvirtintas
+            # veiksmas vykdytų kitą įrankių rinkinį nei tas, kurį patvirtino.
+            if context and hasattr(context, "bot_data") and "tool_registry" in context.bot_data:
+                registry = context.bot_data["tool_registry"]
+            else:
+                registry = get_default_registry(
+                    conn=conn,
+                    user=user,
+                    composio_client=context.bot_data.get("composio_client")
+                    if context and hasattr(context, "bot_data")
+                    else None,
+                )
+            try:
+                result = await execute_approved_action(
+                    info, registry, get_lock_fn=get_user_lock
+                )
+            except Exception:
+                logger.exception("Klaida vykdant patvirtintą veiksmą %d", approval_id)
+                result = ERROR_MESSAGE
+            for chunk in split_message(result):
+                await query.message.reply_text(chunk)
+
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            logger.debug("Nepavyko pašalinti kortelės mygtukų")
+    finally:
+        conn.close()
+
+
 async def _answer(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -265,6 +364,17 @@ async def _answer(
         llm_client = context.bot_data["llm_client"]
     else:
         llm_client = LLMClient()
+
+    for stale in expire_stale_approvals(conn):
+        if stale.get("chat_id") and stale.get("message_id") and context is not None:
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=stale["chat_id"],
+                    message_id=stale["message_id"],
+                    text=APPROVAL_EXPIRED_MESSAGE,
+                )
+            except Exception:
+                logger.debug("Nepavyko atnaujinti pasenusios kortelės")
 
     run_id = f"run_{uuid.uuid4().hex[:12]}"
 
@@ -309,6 +419,7 @@ async def _answer(
             messages=messages,
             user_id=user_id,
             run_id=run_id,
+            approval_hook=make_approval_hook(update, conn, user),
         )
         record_usage(conn, user_id=user_id, cost_usd=loop_result.total_cost_usd)
         add_message(
@@ -344,6 +455,9 @@ def create_application(
         app.bot_data["composio_client"] = composio_client
 
     app.add_handler(CommandHandler("start", handle_start))
+    app.add_handler(
+        CallbackQueryHandler(handle_approval_callback, pattern=r"^(approve|reject):\d+$")
+    )
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
