@@ -32,7 +32,10 @@ MAX_ITERATIONS = 10
 MAX_REQUEST_DURATION_SECONDS = 120.0
 MAX_TOTAL_TOKENS = 60_000
 TOOL_TIMEOUT_SECONDS = 30.0
+# TASK.md: "Kartojimai po klaidos | 3, backoff 1 s, 2 s, 4 s su atsitiktiniu priedu".
+# Three retries after the first attempt, so four attempts and three backoff steps.
 MAX_RETRIES = 3
+MAX_ATTEMPTS = MAX_RETRIES + 1
 BACKOFF_STEPS = [1.0, 2.0, 4.0]
 
 # Lithuanian limit messages
@@ -161,7 +164,7 @@ async def run_loop(
 
         # 3. Call LLM with retries and backoff
         llm_resp = None
-        for attempt in range(MAX_RETRIES):
+        for attempt in range(MAX_ATTEMPTS):
             remaining = _remaining(start_time, max_duration)
             if remaining <= 0:
                 break
@@ -176,9 +179,14 @@ async def run_loop(
                 llm_resp = None
                 break
             except Exception as e:
-                logger.warning("Klaida kviečiant modelį (bandymas %d/%d): %s", attempt + 1, MAX_RETRIES, e)
-                if attempt < MAX_RETRIES - 1 and _remaining(start_time, max_duration) > 0:
-                    delay = BACKOFF_STEPS[attempt] + random.uniform(0.0, 0.5)
+                logger.warning("Klaida kviečiant modelį (bandymas %d/%d): %s", attempt + 1, MAX_ATTEMPTS, e)
+                # No backoff step exists after the last retry.
+                delay = (
+                    BACKOFF_STEPS[attempt] + random.uniform(0.0, 0.5)
+                    if attempt < MAX_RETRIES
+                    else None
+                )
+                if delay is not None and _remaining(start_time, max_duration) > delay:
                     await sleep_fn(delay)
                 else:
                     return LoopResult(
@@ -295,7 +303,6 @@ async def run_loop(
                     stopped_by_limit="duration",
                     messages=loop_messages,
                 )
-            tool_timeout = min(TOOL_TIMEOUT_SECONDS, tool_remaining)
 
             try:
                 record_journal_entry(
@@ -318,11 +325,18 @@ async def run_loop(
             result_str = ""
             if is_read_only:
                 # Retries allowed for read_only tools
-                for attempt in range(MAX_RETRIES):
+                for attempt in range(MAX_ATTEMPTS):
+                    attempt_remaining = _remaining(start_time, max_duration)
+                    if attempt_remaining <= 0:
+                        result_str = clean_tool_result(
+                            f"Klaida vykdant įrankį '{name}': baigėsi užklausos laiko biudžetas.",
+                            tool_name=name,
+                        )
+                        break
                     try:
                         result_str = await asyncio.wait_for(
                             tool_registry.execute(name, args_dict, raise_on_error=True),
-                            timeout=tool_timeout,
+                            timeout=min(TOOL_TIMEOUT_SECONDS, attempt_remaining),
                         )
                         break
                     except Exception as err:
@@ -330,23 +344,28 @@ async def run_loop(
                             "Klaida vykdant read_only įrankį '%s' (bandymas %d/%d): %s",
                             name,
                             attempt + 1,
-                            MAX_RETRIES,
+                            MAX_ATTEMPTS,
                             err,
                         )
-                        if attempt < MAX_RETRIES - 1 and _remaining(start_time, max_duration) > 0:
-                            delay = BACKOFF_STEPS[attempt] + random.uniform(0.0, 0.5)
+                        delay = (
+                            BACKOFF_STEPS[attempt] + random.uniform(0.0, 0.5)
+                            if attempt < MAX_RETRIES
+                            else None
+                        )
+                        if delay is not None and _remaining(start_time, max_duration) > delay:
                             await sleep_fn(delay)
                         else:
                             result_str = clean_tool_result(
                                 f"Klaida vykdant įrankį '{name}': {err}",
                                 tool_name=name,
                             )
+                            break
             else:
                 # Write/destructive tools: NO retries
                 try:
                     result_str = await asyncio.wait_for(
                         tool_registry.execute(name, args_dict, raise_on_error=True),
-                        timeout=tool_timeout,
+                        timeout=min(TOOL_TIMEOUT_SECONDS, tool_remaining),
                     )
                 except Exception as err:
                     logger.warning("Klaida vykdant rašantį įrankį '%s' (be pakartojimo): %s", name, err)

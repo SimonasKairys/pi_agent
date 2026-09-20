@@ -4,7 +4,7 @@ import sqlite3
 import subprocess
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 import pytest
 
 from backup.backup import (
@@ -162,3 +162,35 @@ def test_run_backup_workflow(tmp_path: Path):
     create_args = mock_files.create.call_args[1]
     assert create_args["body"]["parents"] == ["folder_abc"]
     assert create_args["body"]["name"].startswith("piagent-backup-")
+
+
+def test_encrypt_database_never_puts_passphrase_in_argv(tmp_path: Path):
+    """The passphrase must reach gpg over stdin: argv is visible in ps to every user."""
+    plain_file = tmp_path / "data.txt"
+    plain_file.write_bytes(b"Slapti duomenys")
+    gpg_file = tmp_path / "data.txt.gpg"
+    passphrase = "ManoSlaptazodis2026"
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["input"] = kwargs.get("input")
+        result = MagicMock()
+        result.returncode = 0
+        return result
+
+    with patch("backup.backup.subprocess.run", side_effect=fake_run):
+        encrypt_database(plain_file, gpg_file, passphrase)
+
+    cmd = captured["cmd"]
+
+    # The passphrase travels over stdin, not as an argument.
+    assert captured["input"] == passphrase.encode("utf-8")
+    assert "--passphrase-fd" in cmd
+    assert cmd[cmd.index("--passphrase-fd") + 1] == "0"
+    assert "--batch" in cmd
+
+    # No argument carries the passphrase, in any form.
+    assert "--passphrase" not in cmd
+    assert not any(passphrase in str(part) for part in cmd)

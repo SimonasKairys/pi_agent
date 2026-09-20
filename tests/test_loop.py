@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 from agent.llm import LLMResponse
 from agent.loop import (
     run_loop,
+    BACKOFF_STEPS,
     ITERATION_LIMIT_MESSAGE,
     REPETITION_LIMIT_MESSAGE,
     TOKEN_LIMIT_MESSAGE,
@@ -345,3 +346,51 @@ def test_loop_duration_limit_stops_a_slow_model_call():
     assert "trukmės riba" in result.content
     # Must return on its own budget, not after the model call finishes.
     assert elapsed < 2.0
+
+
+def test_loop_read_only_tool_uses_all_backoff_steps_then_gives_up():
+    """A read_only tool that always fails gets 4 attempts and 3 backoff waits."""
+    tool_call = {
+        "id": "call_1",
+        "type": "function",
+        "function": {"name": "search_web", "arguments": '{"query": "x"}'},
+    }
+    resp1 = LLMResponse("", 10, 5, 15, 0.0, tool_calls=[tool_call])
+    resp2 = LLMResponse("Nepavyko rasti.", 10, 5, 15, 0.0, tool_calls=None)
+
+    fake_llm = MagicMock()
+    fake_llm.generate = AsyncMock(side_effect=[resp1, resp2])
+
+    attempts = {"n": 0}
+
+    def always_fails(query: str = ""):
+        attempts["n"] += 1
+        raise RuntimeError("įrankis neveikia")
+
+    registry = ToolRegistry()
+    registry.register(Tool(
+        name="search_web",
+        description="Skaitantis įrankis",
+        parameters={"type": "object", "properties": {}},
+        risk="read_only",
+        func=always_fails,
+    ))
+
+    delays: list[float] = []
+
+    async def spy_sleep(d):
+        delays.append(d)
+
+    result = asyncio.run(run_loop(
+        fake_llm,
+        registry,
+        [{"role": "user", "content": "Ieškok"}],
+        sleep_fn=spy_sleep,
+    ))
+
+    # TASK.md: 3 kartojimai po pirmo bandymo, backoff 1 s, 2 s, 4 s.
+    assert attempts["n"] == 4
+    assert len(delays) == 3
+    for step, actual in zip(BACKOFF_STEPS, delays):
+        assert step <= actual < step + 0.5
+    assert result.content == "Nepavyko rasti."
