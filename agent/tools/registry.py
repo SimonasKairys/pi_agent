@@ -104,7 +104,12 @@ class ToolRegistry:
         """Returns schemas of all tools in OpenAI format for the model."""
         return [t.to_openai_schema() for t in self._tools.values()]
 
-    async def execute(self, name: str, arguments: dict[str, Any]) -> str:
+    async def execute(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        raise_on_error: bool = False,
+    ) -> str:
         """Executes a registered tool and returns sanitized output."""
         tool = self._tools.get(name)
         if tool is None:
@@ -118,6 +123,8 @@ class ToolRegistry:
                 res = tool.func(**arguments)
             raw_result = str(res) if not isinstance(res, str) else res
         except Exception as e:
+            if raise_on_error:
+                raise
             raw_result = f"Klaida vykdant įrankį '{name}': {e}"
 
         return clean_tool_result(raw_result, tool_name=name)

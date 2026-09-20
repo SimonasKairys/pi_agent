@@ -26,6 +26,7 @@ class LLMResponse:
     completion_tokens: int
     total_tokens: int
     cost_usd: float
+    tool_calls: list[Any] | None = None
     raw_response: Any = None
 
 
@@ -49,17 +50,23 @@ class LLMClient:
 
     async def generate(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
-        """Sends messages to the model and returns content with token/cost usage."""
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,  # type: ignore[arg-type]
-            max_tokens=max_tokens,
-        )
+        """Sends messages to the model and returns content with token/cost usage and tool calls."""
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+        }
+        if tools:
+            kwargs["tools"] = tools
+
+        response = await self.client.chat.completions.create(**kwargs)
         choice = response.choices[0]
         content = choice.message.content or ""
+        tool_calls = getattr(choice.message, "tool_calls", None)
 
         usage = response.usage
         prompt_tokens = usage.prompt_tokens if usage else 0
@@ -74,6 +81,7 @@ class LLMClient:
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
             cost_usd=cost_usd,
+            tool_calls=tool_calls,
             raw_response=response,
         )
 

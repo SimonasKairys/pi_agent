@@ -1,0 +1,316 @@
+"""ReAct agent loop for pi_agent.
+
+Coordinates multi-step tool execution with strict limits from TASK.md:
+- Max 10 iterations
+- Max 120s duration
+- Max 60 000 tokens per request across iterations
+- Max 30s per tool call
+- Repetition detection: same tool and arguments 2 times in a row
+- Retries with backoff and jitter ONLY for model calls and read_only tools
+- Execution state tracking for 'naudotas_internetas'
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import random
+import time
+from dataclasses import dataclass, field
+from typing import Any, Awaitable, Callable
+
+from agent.llm import LLMClient
+from agent.tools.registry import ToolRegistry, clean_tool_result
+
+logger = logging.getLogger(__name__)
+
+# Constants from TASK.md "Sprendimai ir skaičiai" (Ciklas)
+MAX_ITERATIONS = 10
+MAX_REQUEST_DURATION_SECONDS = 120.0
+MAX_TOTAL_TOKENS = 60_000
+TOOL_TIMEOUT_SECONDS = 30.0
+MAX_RETRIES = 3
+BACKOFF_STEPS = [1.0, 2.0, 4.0]
+
+# Lithuanian limit messages
+ITERATION_LIMIT_MESSAGE = (
+    "Atsiprašome, pasiekta užklausos iteracijų riba (10). Veiksmas buvo sustabdytas."
+)
+DURATION_LIMIT_MESSAGE = (
+    "Atsiprašome, viršyta užklausos vykdymo trukmės riba (120 s). Veiksmas buvo sustabdytas."
+)
+TOKEN_LIMIT_MESSAGE = (
+    "Atsiprašome, viršyta užklausos žetonų riba (60 000). Veiksmas buvo sustabdytas."
+)
+REPETITION_LIMIT_MESSAGE = (
+    "Atsiprašome, aptiktas pasikartojantis įrankio kvietimas. Veiksmas buvo sustabdytas, "
+    "kad būtų išvengta pasikartojimų."
+)
+
+
+@dataclass
+class LoopResult:
+    """Result of running the ReAct loop."""
+
+    content: str
+    total_prompt_tokens: int = 0
+    total_completion_tokens: int = 0
+    total_tokens: int = 0
+    total_cost_usd: float = 0.0
+    iterations: int = 0
+    naudotas_internetas: bool = False
+    stopped_by_limit: str | None = None
+    messages: list[dict[str, Any]] = field(default_factory=list)
+
+
+def _parse_tool_call(tc: Any) -> tuple[str, str, dict[str, Any], str]:
+    """Extracts (call_id, function_name, parsed_args_dict, raw_args_str) from tool call."""
+    if isinstance(tc, dict):
+        call_id = str(tc.get("id", "call_1"))
+        fn_data = tc.get("function", {})
+        if isinstance(fn_data, dict):
+            name = str(fn_data.get("name", ""))
+            args_raw = fn_data.get("arguments", "{}")
+        else:
+            name = str(getattr(fn_data, "name", ""))
+            args_raw = getattr(fn_data, "arguments", "{}")
+    else:
+        call_id = str(getattr(tc, "id", "call_1"))
+        fn = getattr(tc, "function", None)
+        name = str(getattr(fn, "name", ""))
+        args_raw = getattr(fn, "arguments", "{}")
+
+    if isinstance(args_raw, dict):
+        args_dict = args_raw
+        raw_str = json.dumps(args_dict, sort_keys=True)
+    else:
+        raw_str = str(args_raw)
+        try:
+            args_dict = json.loads(args_raw) if args_raw else {}
+            if not isinstance(args_dict, dict):
+                args_dict = {"_value": args_dict}
+        except Exception:
+            args_dict = {}
+
+    return call_id, name, args_dict, raw_str
+
+
+async def run_loop(
+    llm_client: LLMClient,
+    tool_registry: ToolRegistry,
+    messages: list[dict[str, Any]],
+    max_iterations: int = MAX_ITERATIONS,
+    max_duration: float = MAX_REQUEST_DURATION_SECONDS,
+    max_tokens: int = MAX_TOTAL_TOKENS,
+    sleep_fn: Callable[[float], Awaitable[None]] = asyncio.sleep,
+) -> LoopResult:
+    """Executes ReAct reasoning loop until final answer or limit reached."""
+    start_time = time.monotonic()
+    loop_messages = list(messages)
+
+    total_prompt_tokens = 0
+    total_completion_tokens = 0
+    total_tokens = 0
+    total_cost = 0.0
+    naudotas_internetas = False
+
+    last_call_signature: tuple[str, str] | None = None
+    schemas = tool_registry.get_schemas()
+
+    for iteration in range(1, max_iterations + 1):
+        # 1. Check time limit
+        if time.monotonic() - start_time >= max_duration:
+            return LoopResult(
+                content=DURATION_LIMIT_MESSAGE,
+                total_prompt_tokens=total_prompt_tokens,
+                total_completion_tokens=total_completion_tokens,
+                total_tokens=total_tokens,
+                total_cost_usd=total_cost,
+                iterations=iteration - 1,
+                naudotas_internetas=naudotas_internetas,
+                stopped_by_limit="duration",
+                messages=loop_messages,
+            )
+
+        # 2. Check token limit
+        if total_tokens >= max_tokens:
+            return LoopResult(
+                content=TOKEN_LIMIT_MESSAGE,
+                total_prompt_tokens=total_prompt_tokens,
+                total_completion_tokens=total_completion_tokens,
+                total_tokens=total_tokens,
+                total_cost_usd=total_cost,
+                iterations=iteration - 1,
+                naudotas_internetas=naudotas_internetas,
+                stopped_by_limit="tokens",
+                messages=loop_messages,
+            )
+
+        # 3. Call LLM with retries and backoff
+        llm_resp = None
+        for attempt in range(MAX_RETRIES):
+            if time.monotonic() - start_time >= max_duration:
+                break
+            try:
+                llm_resp = await llm_client.generate(loop_messages, tools=schemas)
+                break
+            except Exception as e:
+                logger.warning("Klaida kviečiant modelį (bandymas %d/%d): %s", attempt + 1, MAX_RETRIES, e)
+                if attempt < MAX_RETRIES - 1:
+                    delay = BACKOFF_STEPS[attempt] + random.uniform(0.0, 0.5)
+                    await sleep_fn(delay)
+                else:
+                    return LoopResult(
+                        content=f"Atsiprašome, įvyko klaida kreipiantis į modelį: {e}",
+                        total_prompt_tokens=total_prompt_tokens,
+                        total_completion_tokens=total_completion_tokens,
+                        total_tokens=total_tokens,
+                        total_cost_usd=total_cost,
+                        iterations=iteration,
+                        naudotas_internetas=naudotas_internetas,
+                        stopped_by_limit="model_error",
+                        messages=loop_messages,
+                    )
+
+        if llm_resp is None:
+            return LoopResult(
+                content=DURATION_LIMIT_MESSAGE,
+                total_prompt_tokens=total_prompt_tokens,
+                total_completion_tokens=total_completion_tokens,
+                total_tokens=total_tokens,
+                total_cost_usd=total_cost,
+                iterations=iteration - 1,
+                naudotas_internetas=naudotas_internetas,
+                stopped_by_limit="duration",
+                messages=loop_messages,
+            )
+
+        total_prompt_tokens += llm_resp.prompt_tokens
+        total_completion_tokens += llm_resp.completion_tokens
+        total_tokens += llm_resp.total_tokens
+        total_cost += llm_resp.cost_usd
+
+        # If no tool calls, return final response
+        if not llm_resp.tool_calls:
+            return LoopResult(
+                content=llm_resp.content,
+                total_prompt_tokens=total_prompt_tokens,
+                total_completion_tokens=total_completion_tokens,
+                total_tokens=total_tokens,
+                total_cost_usd=total_cost,
+                iterations=iteration,
+                naudotas_internetas=naudotas_internetas,
+                messages=loop_messages,
+            )
+
+        # 4. Process tool calls
+        formatted_tool_calls: list[dict[str, Any]] = []
+        parsed_calls: list[tuple[str, str, dict[str, Any], str]] = []
+
+        for tc in llm_resp.tool_calls:
+            call_id, name, args_dict, raw_str = _parse_tool_call(tc)
+            formatted_tool_calls.append({
+                "id": call_id,
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "arguments": raw_str,
+                },
+            })
+            parsed_calls.append((call_id, name, args_dict, raw_str))
+
+        # Add assistant message with tool calls to history
+        loop_messages.append({
+            "role": "assistant",
+            "content": llm_resp.content or None,
+            "tool_calls": formatted_tool_calls,
+        })
+
+        # Execute each tool call
+        for call_id, name, args_dict, _ in parsed_calls:
+            normalized_args = json.dumps(args_dict, sort_keys=True)
+            current_signature = (name, normalized_args)
+
+            # Repetition detection: 2 consecutive calls with same tool and same args
+            if current_signature == last_call_signature:
+                logger.warning("Aptiktas pasikartojantis įrankio kvietimas: %s", current_signature)
+                return LoopResult(
+                    content=REPETITION_LIMIT_MESSAGE,
+                    total_prompt_tokens=total_prompt_tokens,
+                    total_completion_tokens=total_completion_tokens,
+                    total_tokens=total_tokens,
+                    total_cost_usd=total_cost,
+                    iterations=iteration,
+                    naudotas_internetas=naudotas_internetas,
+                    stopped_by_limit="repetition",
+                    messages=loop_messages,
+                )
+
+            last_call_signature = current_signature
+
+            if name == "search_web":
+                naudotas_internetas = True
+
+            tool = tool_registry.get(name)
+            is_read_only = (tool.risk == "read_only") if tool else True
+
+            result_str = ""
+            if is_read_only:
+                # Retries allowed for read_only tools
+                for attempt in range(MAX_RETRIES):
+                    try:
+                        result_str = await asyncio.wait_for(
+                            tool_registry.execute(name, args_dict, raise_on_error=True),
+                            timeout=TOOL_TIMEOUT_SECONDS,
+                        )
+                        break
+                    except Exception as err:
+                        logger.warning(
+                            "Klaida vykdant read_only įrankį '%s' (bandymas %d/%d): %s",
+                            name,
+                            attempt + 1,
+                            MAX_RETRIES,
+                            err,
+                        )
+                        if attempt < MAX_RETRIES - 1:
+                            delay = BACKOFF_STEPS[attempt] + random.uniform(0.0, 0.5)
+                            await sleep_fn(delay)
+                        else:
+                            result_str = clean_tool_result(
+                                f"Klaida vykdant įrankį '{name}': {err}",
+                                tool_name=name,
+                            )
+            else:
+                # Write/destructive tools: NO retries
+                try:
+                    result_str = await asyncio.wait_for(
+                        tool_registry.execute(name, args_dict, raise_on_error=True),
+                        timeout=TOOL_TIMEOUT_SECONDS,
+                    )
+                except Exception as err:
+                    logger.warning("Klaida vykdant rašantį įrankį '%s' (be pakartojimo): %s", name, err)
+                    result_str = clean_tool_result(
+                        f"Klaida vykdant įrankį '{name}': {err}",
+                        tool_name=name,
+                    )
+
+            loop_messages.append({
+                "role": "tool",
+                "tool_call_id": call_id,
+                "name": name,
+                "content": result_str,
+            })
+
+    # Reached maximum iterations without final text answer
+    return LoopResult(
+        content=ITERATION_LIMIT_MESSAGE,
+        total_prompt_tokens=total_prompt_tokens,
+        total_completion_tokens=total_completion_tokens,
+        total_tokens=total_tokens,
+        total_cost_usd=total_cost,
+        iterations=max_iterations,
+        naudotas_internetas=naudotas_internetas,
+        stopped_by_limit="iterations",
+        messages=loop_messages,
+    )
