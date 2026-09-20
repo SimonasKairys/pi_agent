@@ -127,3 +127,112 @@ def load_users(file_path: str | Path | None = None) -> list[User]:
         seen_names.add(name)
 
     return users
+
+
+class UnknownUserError(ConfigError, KeyError):
+    """Raised when looking up an unknown user name or email."""
+    pass
+
+
+def name_to_email(
+    name: str,
+    users: list[User] | None = None,
+    file_path: str | Path | None = None,
+) -> str:
+    """Maps user name to email address from users.toml.
+
+    Raises UnknownUserError if the name is not found.
+    """
+    if users is None:
+        users = load_users(file_path=file_path)
+
+    name_clean = name.strip()
+    for u in users:
+        if u.name == name_clean:
+            return u.email
+
+    name_lower = name_clean.lower()
+    for u in users:
+        if u.name.lower() == name_lower:
+            return u.email
+
+    raise UnknownUserError(f"Vartotojas su vardu '{name}' nerastas")
+
+
+def email_to_name(
+    email: str,
+    users: list[User] | None = None,
+    file_path: str | Path | None = None,
+) -> str:
+    """Maps email address to user name from users.toml.
+
+    Raises UnknownUserError if the email is not found.
+    """
+    if users is None:
+        users = load_users(file_path=file_path)
+
+    email_clean = email.strip().lower()
+    for u in users:
+        if u.email.lower() == email_clean:
+            return u.name
+
+    raise UnknownUserError(f"Vartotojas su el. paštu '{email}' nerastas")
+
+
+def get_user_by_name(
+    name: str,
+    users: list[User] | None = None,
+    file_path: str | Path | None = None,
+) -> User:
+    """Returns User object for given name or raises UnknownUserError."""
+    if users is None:
+        users = load_users(file_path=file_path)
+
+    name_clean = name.strip()
+    for u in users:
+        if u.name == name_clean:
+            return u
+    for u in users:
+        if u.name.lower() == name_clean.lower():
+            return u
+
+    raise UnknownUserError(f"Vartotojas su vardu '{name}' nerastas")
+
+
+def get_user_by_email(
+    email: str,
+    users: list[User] | None = None,
+    file_path: str | Path | None = None,
+) -> User:
+    """Returns User object for given email or raises UnknownUserError."""
+    if users is None:
+        users = load_users(file_path=file_path)
+
+    email_clean = email.strip().lower()
+    for u in users:
+        if u.email.lower() == email_clean:
+            return u
+
+    raise UnknownUserError(f"Vartotojas su el. paštu '{email}' nerastas")
+
+
+def get_user_by_id(
+    telegram_id: int,
+    users: list[User] | None = None,
+    file_path: str | Path | None = None,
+) -> User:
+    """Returns User object for given telegram_id or raises UnknownUserError."""
+    if users is None:
+        users = load_users(file_path=file_path)
+
+    for u in users:
+        if u.telegram_id == telegram_id:
+            return u
+
+    raise UnknownUserError(f"Vartotojas su telegram_id '{telegram_id}' nerastas")
+
+
+# Lithuanian aliases
+vardas_to_email = name_to_email
+email_to_vardas = email_to_name
+
