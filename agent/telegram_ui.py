@@ -40,7 +40,7 @@ from agent.approvals import (
 from agent.journal import record_journal_entry
 from agent.llm import LLMClient
 from agent.loop import run_loop
-from agent.memory import get_user_facts
+from agent.memory import extract_and_save_facts, get_user_facts
 from agent.prompts import (
     APPROVAL_EXPIRED_MESSAGE,
     APPROVAL_PENDING_MESSAGE,
@@ -436,6 +436,19 @@ async def _answer(
         chunks = split_message(loop_result.content)
         for chunk in chunks:
             await update.message.reply_text(chunk)
+
+        # Faktai įrašomi po atsakymo, kad papildomas modelio kvietimas
+        # nevėlintų vartotojo ir kad jo klaida nenuslėptų jau gauto atsakymo.
+        try:
+            await extract_and_save_facts(
+                conn,
+                user_id=user_id,
+                user_message=user_text,
+                assistant_message=loop_result.content,
+                llm_client=llm_client,
+            )
+        except Exception:
+            logger.exception("Klaida įrašant vartotojo %d faktus", user_id)
 
     except Exception:
         logger.exception("Klaida apdorojant vartotojo %d užklausą", user_id)

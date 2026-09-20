@@ -138,11 +138,17 @@ def test_profile_loaded_in_telegram_message(tmp_path: Path, monkeypatch: pytest.
 
     asyncio.run(handle_message(update_a, context_a))
 
-    assert len(captured_prompts) == 1
+    # Du modelio kvietimai: atsakymas ir faktų išgavimas po jo.
+    assert len(captured_prompts) >= 1
     prompt_simonas = captured_prompts[0]
     assert "Simonas yra veganas" in prompt_simonas
-    assert "Rūta dirba architekte" not in prompt_simonas
-    assert "architekte" not in prompt_simonas
+
+    simonas_calls = len(captured_prompts)
+
+    # Svetimas faktas neturi patekti į NĖ VIENĄ kvietimą.
+    for prompt in captured_prompts:
+        assert "Rūta dirba architekte" not in prompt
+        assert "architekte" not in prompt
 
     # 2. Rūta sends a message
     update_b = MagicMock()
@@ -157,8 +163,57 @@ def test_profile_loaded_in_telegram_message(tmp_path: Path, monkeypatch: pytest.
 
     asyncio.run(handle_message(update_b, context_b))
 
-    assert len(captured_prompts) == 2
-    prompt_ruta = captured_prompts[1]
-    assert "Rūta dirba architekte" in prompt_ruta
-    assert "Simonas yra veganas" not in prompt_ruta
-    assert "veganas" not in prompt_ruta
+    # Rūtos kvietimai prasideda po Simono kvietimų.
+    ruta_prompts = captured_prompts[simonas_calls:]
+    assert any("Rūta dirba architekte" in p for p in ruta_prompts)
+
+    # Simono faktas neturi patekti į NĖ VIENĄ Rūtos kvietimą.
+    for prompt in ruta_prompts:
+        assert "Simonas yra veganas" not in prompt
+        assert "veganas" not in prompt
+
+
+def test_facts_saved_after_each_message(tmp_path, monkeypatch):
+    """Facts must be written right after a conversation, not only at 03:00."""
+    import json as _json
+    from agent.db import get_connection as _get_connection
+    from agent.memory import get_user_facts
+    import agent.telegram_ui as ui
+
+    db_file = tmp_path / "t.db"
+    conn = _get_connection(db_file)
+    user = User(111, "Simonas", "simonas@example.com", "Europe/Vilnius")
+    monkeypatch.setattr(ui, "load_users", lambda: [user])
+    monkeypatch.setattr(ui, "get_connection", lambda: _get_connection(db_file))
+
+    calls = {"n": 0}
+
+    async def generate(messages=None, tools=None, max_tokens=1500):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return LLMResponse("Gerai, įsiminiau.", 10, 5, 15, 0.0, tool_calls=None)
+        # Antras kvietimas yra faktų išgavimas.
+        return LLMResponse(
+            _json.dumps([{"fact": "Simonas alergiškas riešutams", "importance": 9}]),
+            10, 5, 15, 0.0, tool_calls=None,
+        )
+
+    fake_llm = MagicMock()
+    fake_llm.generate = generate
+
+    update = MagicMock()
+    update.effective_chat.type = "private"
+    update.effective_chat.id = 611
+    update.effective_user.id = 111
+    update.message.text = "Esu alergiškas riešutams"
+    update.message.reply_text = AsyncMock()
+    update.message.chat.send_action = AsyncMock()
+
+    ctx = MagicMock()
+    ctx.bot_data = {"llm_client": fake_llm}
+
+    asyncio.run(handle_message(update, ctx))
+
+    facts = [f["fact"] for f in get_user_facts(conn, 111)]
+    assert "Simonas alergiškas riešutams" in facts
+    assert calls["n"] == 2

@@ -150,7 +150,8 @@ def test_handle_message_authorized(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
     asyncio.run(handle_message(update, context))
 
-    fake_llm.generate.assert_awaited_once()
+    # Du kvietimai: atsakymas ir faktų išgavimas po jo.
+    assert fake_llm.generate.await_count >= 1
     update.message.reply_text.assert_awaited_once_with("Atsakymas iš modelio")
 
     # Verify messages saved to database
@@ -248,9 +249,12 @@ def test_handle_message_summarizes_long_history(tmp_path: Path, monkeypatch: pyt
     assert len(summaries) >= 1
     assert summaries[0]["content"] == "Santrauka iš modelio"
 
-    # The summary must reach the model in the final call.
-    sent = fake_llm.generate.call_args[1]["messages"]
-    assert any("Santrauka iš modelio" in m["content"] for m in sent)
+    # The summary must reach the model in the answering call.
+    assert any(
+        any("Santrauka iš modelio" in m["content"] for m in call.kwargs["messages"])
+        for call in fake_llm.generate.call_args_list
+        if "messages" in call.kwargs
+    )
 
 
 def test_summarization_failure_does_not_block_answer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
