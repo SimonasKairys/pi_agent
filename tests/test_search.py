@@ -12,6 +12,9 @@ from agent.tools.search import (
     MAX_SNIPPET_LENGTH,
     MAX_TOTAL_LENGTH,
 )
+from dataclasses import replace
+from functools import partial
+
 from agent.tools.registry import UNTRUSTED_TAG_OPEN, UNTRUSTED_TAG_CLOSE, ToolRegistry
 
 
@@ -81,10 +84,11 @@ def test_search_web_with_mock_client():
     assert "Šiandien Vilniuje saulėta" in result
 
     registry = ToolRegistry()
-    registry.register(SEARCH_TOOL)
-    wrapped = asyncio.run(registry.execute(
-        "search_web", {"query": "orai Vilniuje", "api_key": "fake-key", "client": mock_client}
+    registry.register(replace(
+        SEARCH_TOOL,
+        func=partial(search_web, api_key="fake-key", client=mock_client),
     ))
+    wrapped = asyncio.run(registry.execute("search_web", {"query": "orai Vilniuje"}))
 
     # Exactly one marker: wrapping in both places would nest them.
     assert wrapped.count(UNTRUSTED_TAG_OPEN) == 1

@@ -100,3 +100,36 @@ def test_unknown_tool_execution():
     res = asyncio.run(registry.execute("non_existent", {}))
     assert UNTRUSTED_TAG_OPEN in res
     assert "Klaida: įrankis 'non_existent' neegzistuoja." in res
+
+
+def test_execute_drops_arguments_not_in_schema():
+    """A prompt injection must not smuggle undeclared arguments into a tool."""
+    received = {}
+
+    def spy_tool(query: str = "", api_key: str = "tikras", **kwargs):
+        received.update({"query": query, "api_key": api_key, "kwargs": kwargs})
+        return "gerai"
+
+    registry = ToolRegistry()
+    registry.register(Tool(
+        name="search_web",
+        description="Paieška",
+        parameters={
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+        },
+        risk="read_only",
+        func=spy_tool,
+    ))
+
+    asyncio.run(registry.execute("search_web", {
+        "query": "klausimas",
+        "api_key": "UZPUOLIKO-RAKTAS",
+        "client": "svetimas",
+    }))
+
+    # The declared argument passes through; the undeclared ones never arrive.
+    assert received["query"] == "klausimas"
+    assert received["api_key"] == "tikras"
+    assert received["kwargs"] == {}

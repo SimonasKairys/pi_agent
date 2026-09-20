@@ -8,9 +8,12 @@ Google identifiers, and wraps outputs in untrusted data markers.
 from __future__ import annotations
 
 import inspect
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any, Callable
+
+logger = logging.getLogger(__name__)
 
 # Tag markers for untrusted data
 UNTRUSTED_TAG_OPEN = "<nepatikimi_duomenys"
@@ -70,6 +73,11 @@ class Tool:
     risk: str  # 'read_only' arba 'destructive'
     func: Callable[..., Any]
 
+    def allowed_argument_names(self) -> set[str]:
+        """Returns the argument names declared in the tool schema."""
+        properties = self.parameters.get("properties", {})
+        return set(properties) if isinstance(properties, dict) else set()
+
     def to_openai_schema(self) -> dict[str, Any]:
         """Returns the OpenAI function schema format for OpenRouter."""
         return {
@@ -116,11 +124,22 @@ class ToolRegistry:
             raw_result = f"Klaida: įrankis '{name}' neegzistuoja."
             return clean_tool_result(raw_result, tool_name=name)
 
+        # The model writes these arguments, and a prompt injection can add its own.
+        # Anything the schema does not declare is dropped: search_web, for example,
+        # takes an api_key parameter that no caller but our own code may set.
+        allowed = tool.allowed_argument_names()
+        safe_arguments = {k: v for k, v in arguments.items() if k in allowed}
+        dropped = sorted(set(arguments) - allowed)
+        if dropped:
+            logger.warning(
+                "Įrankio '%s' kvietime atmesti nedeklaruoti argumentai: %s", name, dropped
+            )
+
         try:
             if inspect.iscoroutinefunction(tool.func):
-                res = await tool.func(**arguments)
+                res = await tool.func(**safe_arguments)
             else:
-                res = tool.func(**arguments)
+                res = tool.func(**safe_arguments)
             raw_result = str(res) if not isinstance(res, str) else res
         except Exception as e:
             if raise_on_error:

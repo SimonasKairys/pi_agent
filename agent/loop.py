@@ -37,6 +37,7 @@ TOOL_TIMEOUT_SECONDS = 30.0
 MAX_RETRIES = 3
 MAX_ATTEMPTS = MAX_RETRIES + 1
 BACKOFF_STEPS = [1.0, 2.0, 4.0]
+assert len(BACKOFF_STEPS) == MAX_RETRIES, "kiekvienam kartojimui reikia savo backoff pakopos"
 
 # Lithuanian limit messages
 ITERATION_LIMIT_MESSAGE = (
