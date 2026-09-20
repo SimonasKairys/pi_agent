@@ -7,6 +7,7 @@ and manages conversation summarization.
 from __future__ import annotations
 
 import inspect
+import logging
 import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -16,6 +17,8 @@ VERBATIM_MESSAGES_COUNT = 20
 SUMMARIZE_THRESHOLD = 40
 MAX_CONTEXT_TOKENS = 32_000
 MAX_RESPONSE_TOKENS = 1_500
+
+logger = logging.getLogger(__name__)
 
 
 def estimate_tokens(text: str) -> int:
@@ -96,7 +99,13 @@ async def check_and_summarize(
 
     if inspect.isawaitable(result):
         result = await result
-    new_summary = str(result)
+    new_summary = str(result).strip()
+
+    # An empty summary must not advance covers_until_msg_id: those messages
+    # would then be covered by nothing and never summarized again.
+    if not new_summary:
+        logger.warning("Vartotojo %d sutraukimas grąžino tuščią santrauką", user_id)
+        return None
 
     now = datetime.now(timezone.utc).isoformat()
     conn.execute(

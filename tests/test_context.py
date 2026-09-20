@@ -175,3 +175,25 @@ def test_existing_summary_is_passed_on_second_round(tmp_path: Path):
 
     assert seen == [None, "Santrauka 1"]
     assert get_latest_summary(conn, user_id)["content"] == "Santrauka 2"
+
+
+def test_empty_summary_is_not_stored(tmp_path: Path):
+    """An empty summary must not advance the cutoff past uncovered messages."""
+    db_file = tmp_path / "test.db"
+    conn = get_connection(db_file)
+
+    user_id = 100
+    for i in range(45):
+        add_message(conn, user_id=user_id, role="user", content=f"Istorija {i:02d}")
+
+    async def empty_summarize(msgs, existing_summary=None):
+        return ""
+
+    assert asyncio.run(check_and_summarize(conn, user_id, empty_summarize)) is None
+    assert get_latest_summary(conn, user_id) is None
+
+    # The messages stay uncovered, so a working summarizer still sees all 25.
+    async def good_summarize(msgs, existing_summary=None):
+        return f"Sutraukta {len(msgs)}"
+
+    assert asyncio.run(check_and_summarize(conn, user_id, good_summarize)) == "Sutraukta 25"

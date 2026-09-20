@@ -252,3 +252,54 @@ def test_handle_message_summarizes_long_history(tmp_path: Path, monkeypatch: pyt
     # The summary must reach the model in the final call.
     sent = fake_llm.generate.call_args[1]["messages"]
     assert any("Santrauka iš modelio" in m["content"] for m in sent)
+
+
+def test_summarization_failure_does_not_block_answer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """A failed summary must degrade to verbatim history, not drop the answer."""
+    db_file = tmp_path / "test.db"
+    monkeypatch.setattr("agent.db.get_db_path", lambda: db_file)
+    monkeypatch.setattr("agent.telegram_ui.get_connection", lambda: get_connection(db_file))
+
+    authorized_user = User(
+        telegram_id=111,
+        name="Simonas",
+        email="simonas@example.com",
+        timezone="Europe/Vilnius",
+    )
+    monkeypatch.setattr("agent.telegram_ui.load_users", lambda: [authorized_user])
+
+    fake_llm = MagicMock()
+    fake_llm.generate = AsyncMock(return_value=LLMResponse(
+        content="Atsakymas", prompt_tokens=20, completion_tokens=10,
+        total_tokens=30, cost_usd=0.0,
+    ))
+    fake_llm.summarize = AsyncMock(side_effect=RuntimeError("modelis neatsako"))
+
+    def make_update(text: str):
+        update = MagicMock()
+        update.effective_chat.type = "private"
+        update.effective_user.id = 111
+        update.message.text = text
+        update.message.reply_text = AsyncMock()
+        update.message.chat.send_action = AsyncMock()
+        return update
+
+    context = MagicMock()
+    context.bot_data = {"llm_client": fake_llm}
+
+    last_update = None
+
+    async def drive():
+        nonlocal last_update
+        for i in range(25):
+            last_update = make_update(f"Žinutė {i}")
+            await handle_message(last_update, context)
+
+    asyncio.run(drive())
+
+    fake_llm.summarize.assert_awaited()
+    # The user still gets an answer built from verbatim history.
+    last_update.message.reply_text.assert_awaited_once_with("Atsakymas")
+
+    conn = get_connection(db_file)
+    assert conn.execute("SELECT COUNT(*) FROM summaries").fetchone()[0] == 0
