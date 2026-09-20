@@ -38,6 +38,7 @@ from agent.prompts import (
 )
 from agent.tools.registry import ToolRegistry
 from agent.tools.search import SEARCH_TOOL
+from agent.tools.calendar import LIST_EVENTS_TOOL, make_list_events_tool
 
 logger = logging.getLogger(__name__)
 
@@ -170,10 +171,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             conn.close()
 
 
-def get_default_registry() -> ToolRegistry:
-    """Builds the default tool registry populated with search_web."""
+def get_default_registry(
+    conn: Any = None,
+    user: User | None = None,
+    composio_client: Any = None,
+) -> ToolRegistry:
+    """Builds the default tool registry populated with search_web and calendar tools."""
     registry = ToolRegistry()
     registry.register(SEARCH_TOOL)
+    if conn is not None and user is not None:
+        registry.register(
+            make_list_events_tool(
+                conn=conn,
+                user_id=user.telegram_id,
+                timezone_str=user.timezone,
+                composio_client=composio_client,
+            )
+        )
+    else:
+        registry.register(LIST_EVENTS_TOOL)
     return registry
 
 
@@ -240,7 +256,16 @@ async def _answer(
         if context and hasattr(context, "bot_data") and "tool_registry" in context.bot_data:
             tool_registry = context.bot_data["tool_registry"]
         else:
-            tool_registry = get_default_registry()
+            composio_client = (
+                context.bot_data.get("composio_client")
+                if context and hasattr(context, "bot_data")
+                else None
+            )
+            tool_registry = get_default_registry(
+                conn=conn,
+                user=user,
+                composio_client=composio_client,
+            )
 
         loop_result = await run_loop(
             llm_client=llm_client,
@@ -271,12 +296,16 @@ def create_application(
     token: str,
     llm_client: LLMClient | None = None,
     tool_registry: ToolRegistry | None = None,
+    composio_client: Any = None,
 ) -> Application:
     """Creates and configures the Telegram Application."""
     app = Application.builder().token(token).concurrent_updates(CONCURRENT_UPDATES).build()
     if llm_client is not None:
         app.bot_data["llm_client"] = llm_client
-    app.bot_data["tool_registry"] = tool_registry or get_default_registry()
+    if tool_registry is not None:
+        app.bot_data["tool_registry"] = tool_registry
+    if composio_client is not None:
+        app.bot_data["composio_client"] = composio_client
 
     app.add_handler(CommandHandler("start", handle_start))
     app.add_handler(
