@@ -30,7 +30,8 @@ def backup_database(src_db_path: Path, dest_db_path: Path) -> None:
 
     dest_db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    src_conn = sqlite3.connect(str(src_db_path))
+    # The bot may be mid-write, so wait instead of failing with "database is locked".
+    src_conn = sqlite3.connect(str(src_db_path), timeout=30.0)
     dest_conn = sqlite3.connect(str(dest_db_path))
     try:
         src_conn.backup(dest_conn)

@@ -28,7 +28,6 @@ from agent.db import (
 )
 from agent.llm import LLMClient
 from agent.prompts import (
-    BUSY_MESSAGE,
     ERROR_MESSAGE,
     START_MESSAGE,
     UNAUTHORIZED_MESSAGE,
@@ -144,76 +143,90 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(UNAUTHORIZED_MESSAGE)
         return
 
-    user_id = user.telegram_id
-    user_text = update.message.text
-    lock = get_user_lock(user_id)
+    lock = get_user_lock(user.telegram_id)
 
     async with lock:
         conn = get_connection()
         try:
-            check_daily_cost_limit(conn, user_id)
-        except LimitExceededError as e:
-            await update.message.reply_text(str(e))
-            return
+            await _answer(update, context, user, conn)
+        finally:
+            conn.close()
 
-        # Record incoming user message
-        add_message(conn, user_id=user_id, role="user", content=user_text)
 
-        # Prepare context and prompt
-        try:
-            all_users = load_users()
-        except Exception:
-            all_users = [user]
+async def _answer(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    user: User,
+    conn: Any,
+) -> None:
+    """Answers one message for an authorized user, holding that user's lock."""
+    user_id = user.telegram_id
+    user_text = update.message.text
 
-        allowed_names = [u.name for u in all_users if u.telegram_id != user_id]
-        system_prompt = build_system_prompt(
-            name=user.name,
-            timezone_name=user.timezone,
-            allowed_names=allowed_names,
+    try:
+        check_daily_cost_limit(conn, user_id)
+    except LimitExceededError as e:
+        await update.message.reply_text(str(e))
+        return
+
+    # Record incoming user message
+    add_message(conn, user_id=user_id, role="user", content=user_text)
+
+    # Prepare context and prompt
+    try:
+        all_users = load_users()
+    except Exception:
+        all_users = [user]
+
+    allowed_names = [u.name for u in all_users if u.telegram_id != user_id]
+    system_prompt = build_system_prompt(
+        name=user.name,
+        timezone_name=user.timezone,
+        allowed_names=allowed_names,
+    )
+    llm_client: LLMClient
+    if context and hasattr(context, "bot_data") and "llm_client" in context.bot_data:
+        llm_client = context.bot_data["llm_client"]
+    else:
+        llm_client = LLMClient()
+
+    # Older history is summarized here. A failed summary must not block the
+    # answer, so the context is rebuilt without it.
+    try:
+        messages = await build_context(
+            conn=conn,
+            user_id=user_id,
+            system_prompt=system_prompt,
+            summarize_fn=make_summarizer(llm_client, conn, user_id),
         )
-        llm_client: LLMClient
-        if context and hasattr(context, "bot_data") and "llm_client" in context.bot_data:
-            llm_client = context.bot_data["llm_client"]
-        else:
-            llm_client = LLMClient()
+    except Exception:
+        logger.exception("Nepavyko sutraukti vartotojo %d istorijos", user_id)
+        messages = await build_context(
+            conn=conn,
+            user_id=user_id,
+            system_prompt=system_prompt,
+        )
 
-        # Older history is summarized here. A failed summary must not block the
-        # answer, so the context is rebuilt without it.
-        try:
-            messages = await build_context(
-                conn=conn,
-                user_id=user_id,
-                system_prompt=system_prompt,
-                summarize_fn=make_summarizer(llm_client, conn, user_id),
-            )
-        except Exception:
-            logger.exception("Nepavyko sutraukti vartotojo %d istorijos", user_id)
-            messages = await build_context(
-                conn=conn,
-                user_id=user_id,
-                system_prompt=system_prompt,
-            )
+    await update.message.chat.send_action(action="typing")
 
-        await update.message.chat.send_action(action="typing")
+    try:
+        llm_response = await llm_client.generate(messages=messages)
+        record_usage(conn, user_id=user_id, cost_usd=llm_response.cost_usd)
+        add_message(
+            conn,
+            user_id=user_id,
+            role="assistant",
+            content=llm_response.content,
+            tokens=llm_response.completion_tokens,
+        )
 
-        try:
-            llm_response = await llm_client.generate(messages=messages)
-            record_usage(conn, user_id=user_id, cost_usd=llm_response.cost_usd)
-            add_message(
-                conn,
-                user_id=user_id,
-                role="assistant",
-                content=llm_response.content,
-                tokens=llm_response.completion_tokens,
-            )
+        chunks = split_message(llm_response.content)
+        for chunk in chunks:
+            await update.message.reply_text(chunk)
 
-            chunks = split_message(llm_response.content)
-            for chunk in chunks:
-                await update.message.reply_text(chunk)
-
-        except Exception:
-            logger.exception("Klaida apdorojant vartotojo %d užklausą", user_id)
-            await update.message.reply_text(ERROR_MESSAGE)
+    except Exception:
+        logger.exception("Klaida apdorojant vartotojo %d užklausą", user_id)
+        await update.message.reply_text(ERROR_MESSAGE)
 
 
 def create_application(

@@ -10,6 +10,10 @@ import zoneinfo
 from datetime import datetime
 from pathlib import Path
 from agent.config import get_db_path
+from agent.prompts import (
+    system_limit_exceeded_message,
+    user_limit_exceeded_message,
+)
 
 CURRENT_SCHEMA_VERSION = 1
 
@@ -180,13 +184,9 @@ def check_daily_cost_limit(
 
     user_cost = get_user_daily_cost(conn, user_id, day=day)
     if user_cost >= MAX_USER_DAILY_COST_USD:
-        raise LimitExceededError(
-            f"Viršyta jūsų dienos naudojimo riba ({MAX_USER_DAILY_COST_USD:.2f} USD). Bandykite rytoj."
-        )
+        raise LimitExceededError(user_limit_exceeded_message(MAX_USER_DAILY_COST_USD))
 
     total_cost = get_total_daily_cost(conn, day=day)
     if total_cost >= MAX_TOTAL_DAILY_COST_USD:
-        raise LimitExceededError(
-            f"Viršyta bendra sistemos dienos naudojimo riba ({MAX_TOTAL_DAILY_COST_USD:.2f} USD). Bandykite rytoj."
-        )
+        raise LimitExceededError(system_limit_exceeded_message(MAX_TOTAL_DAILY_COST_USD))
 

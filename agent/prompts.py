@@ -28,9 +28,25 @@ dalyvių ar faktų."""
 START_MESSAGE = "Sveiki! Aš esu jūsų asmeninis pagalbininkas. Kuo galiu padėti?"
 UNAUTHORIZED_MESSAGE = "Atsiprašome, neturite prieigos prie šio boto."
 ERROR_MESSAGE = "Atsiprašome, įvyko klaida apdorojant jūsų užklausą. Pabandykite vėliau."
-USER_LIMIT_EXCEEDED_MESSAGE = "Viršyta jūsų dienos naudojimo riba (1,00 USD). Bandykite rytoj."
-SYSTEM_LIMIT_EXCEEDED_MESSAGE = "Viršyta bendra sistemos dienos naudojimo riba (4,00 USD). Bandykite rytoj."
+# Templates: the limit itself lives in db.py, the wording lives here.
+USER_LIMIT_EXCEEDED_MESSAGE = "Viršyta jūsų dienos naudojimo riba ({riba} USD). Bandykite rytoj."
+SYSTEM_LIMIT_EXCEEDED_MESSAGE = "Viršyta bendra sistemos dienos naudojimo riba ({riba} USD). Bandykite rytoj."
 BUSY_MESSAGE = "Jūsų ankstesnė užklausa dar vykdoma. Prašome palaukti."
+
+
+def format_usd(amount: float) -> str:
+    """Formats a USD amount with the Lithuanian decimal comma."""
+    return f"{amount:.2f}".replace(".", ",")
+
+
+def user_limit_exceeded_message(limit_usd: float) -> str:
+    """Returns the per-user daily limit message for the given limit."""
+    return USER_LIMIT_EXCEEDED_MESSAGE.format(riba=format_usd(limit_usd))
+
+
+def system_limit_exceeded_message(limit_usd: float) -> str:
+    """Returns the system-wide daily limit message for the given limit."""
+    return SYSTEM_LIMIT_EXCEEDED_MESSAGE.format(riba=format_usd(limit_usd))
 
 
 def build_system_prompt(
