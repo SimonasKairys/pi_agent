@@ -55,6 +55,8 @@ Install the libraries (saraso rasyti ranka nereikia, jis yra requirements.txt):
 	telegram api: gaunamas is @BotFather (/newbot)
 	openrouter api: openrouter.ai raktu skiltyje
 	model_name: deepseek/deepseek-v4.1-flash
+	tavily api: tavily.com (interneto paieskai)
+	composio api: app.composio.dev (Google Calendar integracijai)
 -----------------------------------------------
 bot.py ateina is GitHub (klonavimas aukstiau), jo kurti ranka nereikia.
 Failas .env i GitHub nekeliamas: raktai Raspberry Pi laikomi /etc/piagent/env.
@@ -70,6 +72,13 @@ TELEGRAM_BOT_TOKEN=jusu_telegram_tokenas
 TAVILY_API_KEY=jusu_tavily_raktas
 COMPOSIO_API_KEY=jusu_composio_raktas
 COMPOSIO_CONNECTED_ACCOUNT_ID=prijungtos_paskyros_id
+
+Kintamuju paaiskinimai:
+- OPENROUTER_API_KEY: OpenRouter API raktas modelio kvietimams.
+- TELEGRAM_BOT_TOKEN: Telegram boto tokenas is @BotFather.
+- TAVILY_API_KEY: Tavily API raktas paieskai internete.
+- COMPOSIO_API_KEY: Composio API raktas kalendoriaus irankiu vykdymui (su Tool execution: Write leidimu).
+- COMPOSIO_CONNECTED_ACCOUNT_ID: Composio prijungtos Google Calendar paskyros identifikatorius (formatas ca_...).
 
 Apribokite teises:
 	sudo chown root:root /etc/piagent/env
