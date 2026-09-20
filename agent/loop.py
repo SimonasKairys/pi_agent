@@ -17,9 +17,11 @@ import json
 import logging
 import random
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
+from agent.journal import record_journal_entry
 from agent.llm import LLMClient
 from agent.tools.registry import ToolRegistry, clean_tool_result
 
@@ -100,12 +102,17 @@ async def run_loop(
     llm_client: LLMClient,
     tool_registry: ToolRegistry,
     messages: list[dict[str, Any]],
+    user_id: int = 0,
+    run_id: str | None = None,
     max_iterations: int = MAX_ITERATIONS,
     max_duration: float = MAX_REQUEST_DURATION_SECONDS,
     max_tokens: int = MAX_TOTAL_TOKENS,
     sleep_fn: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> LoopResult:
     """Executes ReAct reasoning loop until final answer or limit reached."""
+    if run_id is None:
+        run_id = f"run_{uuid.uuid4().hex[:12]}"
+
     start_time = time.monotonic()
     loop_messages = list(messages)
 
@@ -153,7 +160,7 @@ async def run_loop(
             if time.monotonic() - start_time >= max_duration:
                 break
             try:
-                llm_resp = await llm_client.generate(loop_messages, tools=schemas)
+                llm_resp = await llm_client.generate(messages=loop_messages, tools=schemas)
                 break
             except Exception as e:
                 logger.warning("Klaida kviečiant modelį (bandymas %d/%d): %s", attempt + 1, MAX_RETRIES, e)
@@ -190,6 +197,19 @@ async def run_loop(
         total_completion_tokens += llm_resp.completion_tokens
         total_tokens += llm_resp.total_tokens
         total_cost += llm_resp.cost_usd
+
+        try:
+            record_journal_entry(
+                run_id=run_id,
+                user_id=user_id,
+                tool_name=None,
+                tokens=llm_resp.total_tokens,
+                cost_usd=llm_resp.cost_usd,
+                prompt_tokens=llm_resp.prompt_tokens,
+                completion_tokens=llm_resp.completion_tokens,
+            )
+        except Exception as log_err:
+            logger.warning("Klaida rašant modelio kvietimą į žurnalą: %s", log_err)
 
         # If no tool calls, return final response
         if not llm_resp.tool_calls:
@@ -248,6 +268,18 @@ async def run_loop(
                 )
 
             last_call_signature = current_signature
+
+            try:
+                record_journal_entry(
+                    run_id=run_id,
+                    user_id=user_id,
+                    tool_name=name,
+                    tokens=0,
+                    cost_usd=0.0,
+                    details={"arguments": args_dict},
+                )
+            except Exception as log_err:
+                logger.warning("Klaida rašant įrankio kvietimą į žurnalą: %s", log_err)
 
             if name == "search_web":
                 naudotas_internetas = True

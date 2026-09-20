@@ -11,7 +11,6 @@ from agent.llm import LLMResponse
 from agent.prompts import (
     START_MESSAGE,
     UNAUTHORIZED_MESSAGE,
-    ERROR_MESSAGE,
 )
 from agent.telegram_ui import (
     split_message,

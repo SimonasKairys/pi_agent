@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from typing import Any
 from telegram import Update
 from telegram.ext import (
@@ -27,12 +28,15 @@ from agent.db import (
     LimitExceededError,
 )
 from agent.llm import LLMClient
+from agent.loop import run_loop
 from agent.prompts import (
     ERROR_MESSAGE,
     START_MESSAGE,
     UNAUTHORIZED_MESSAGE,
     build_system_prompt,
 )
+from agent.tools.registry import ToolRegistry
+from agent.tools.search import SEARCH_TOOL
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +157,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             conn.close()
 
 
+def get_default_registry() -> ToolRegistry:
+    """Builds the default tool registry populated with search_web."""
+    registry = ToolRegistry()
+    registry.register(SEARCH_TOOL)
+    return registry
+
+
 async def _answer(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -210,17 +221,30 @@ async def _answer(
     await update.message.chat.send_action(action="typing")
 
     try:
-        llm_response = await llm_client.generate(messages=messages)
-        record_usage(conn, user_id=user_id, cost_usd=llm_response.cost_usd)
+        tool_registry: ToolRegistry
+        if context and hasattr(context, "bot_data") and "tool_registry" in context.bot_data:
+            tool_registry = context.bot_data["tool_registry"]
+        else:
+            tool_registry = get_default_registry()
+
+        run_id = f"run_{uuid.uuid4().hex[:12]}"
+        loop_result = await run_loop(
+            llm_client=llm_client,
+            tool_registry=tool_registry,
+            messages=messages,
+            user_id=user_id,
+            run_id=run_id,
+        )
+        record_usage(conn, user_id=user_id, cost_usd=loop_result.total_cost_usd)
         add_message(
             conn,
             user_id=user_id,
             role="assistant",
-            content=llm_response.content,
-            tokens=llm_response.completion_tokens,
+            content=loop_result.content,
+            tokens=loop_result.total_completion_tokens,
         )
 
-        chunks = split_message(llm_response.content)
+        chunks = split_message(loop_result.content)
         for chunk in chunks:
             await update.message.reply_text(chunk)
 
@@ -232,11 +256,13 @@ async def _answer(
 def create_application(
     token: str,
     llm_client: LLMClient | None = None,
+    tool_registry: ToolRegistry | None = None,
 ) -> Application:
     """Creates and configures the Telegram Application."""
     app = Application.builder().token(token).concurrent_updates(CONCURRENT_UPDATES).build()
     if llm_client is not None:
         app.bot_data["llm_client"] = llm_client
+    app.bot_data["tool_registry"] = tool_registry or get_default_registry()
 
     app.add_handler(CommandHandler("start", handle_start))
     app.add_handler(

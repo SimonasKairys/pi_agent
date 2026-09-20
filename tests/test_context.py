@@ -9,8 +9,6 @@ from agent.context import (
     get_latest_summary,
     check_and_summarize,
     build_context,
-    SUMMARIZE_THRESHOLD,
-    VERBATIM_MESSAGES_COUNT,
 )
 
 
