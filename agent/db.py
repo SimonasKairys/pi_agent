@@ -16,7 +16,7 @@ from agent.prompts import (
     user_limit_exceeded_message,
 )
 
-CURRENT_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 3
 
 # Pricing and limits from TASK.md "Sprendimai ir skaičiai"
 INPUT_TOKEN_PRICE_PER_M = 0.15
@@ -74,6 +74,47 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
         conn.execute("PRAGMA user_version = 2;")
         conn.commit()
         version = 2
+
+    if version < 3:
+        _migrate_to_v3(conn)
+        conn.execute("PRAGMA user_version = 3;")
+        conn.commit()
+        version = 3
+
+
+def _migrate_to_v3(conn: sqlite3.Connection) -> None:
+    """Migration to schema version 3: facts and facts_fts."""
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS facts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        fact TEXT NOT NULL,
+        importance INTEGER NOT NULL,
+        source_msg_id INTEGER,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (source_msg_id) REFERENCES messages (id) ON DELETE SET NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_facts_user ON facts (user_id);
+    CREATE INDEX IF NOT EXISTS idx_facts_user_importance ON facts (user_id, importance);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
+        fact,
+        content='facts',
+        content_rowid='id'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS facts_ai AFTER INSERT ON facts BEGIN
+        INSERT INTO facts_fts(rowid, fact) VALUES (new.id, new.fact);
+    END;
+    CREATE TRIGGER IF NOT EXISTS facts_ad AFTER DELETE ON facts BEGIN
+        INSERT INTO facts_fts(facts_fts, rowid, fact) VALUES('delete', old.id, old.fact);
+    END;
+    CREATE TRIGGER IF NOT EXISTS facts_au AFTER UPDATE ON facts BEGIN
+        INSERT INTO facts_fts(facts_fts, rowid, fact) VALUES('delete', old.id, old.fact);
+        INSERT INTO facts_fts(rowid, fact) VALUES (new.id, new.fact);
+    END;
+    """)
 
 
 def _migrate_to_v2(conn: sqlite3.Connection) -> None:
