@@ -12,16 +12,18 @@ from pathlib import Path
 from agent.config import get_db_path
 from agent.prompts import (
     system_limit_exceeded_message,
+    user_event_limit_exceeded_message,
     user_limit_exceeded_message,
 )
 
-CURRENT_SCHEMA_VERSION = 1
+CURRENT_SCHEMA_VERSION = 2
 
 # Pricing and limits from TASK.md "Sprendimai ir skaičiai"
 INPUT_TOKEN_PRICE_PER_M = 0.15
 OUTPUT_TOKEN_PRICE_PER_M = 0.60
 MAX_USER_DAILY_COST_USD = 1.00
 MAX_TOTAL_DAILY_COST_USD = 4.00
+MAX_USER_DAILY_EVENTS = 20
 RESET_TIMEZONE = "Europe/Vilnius"
 
 
@@ -58,13 +60,58 @@ def get_user_version(conn: sqlite3.Connection) -> int:
 
 
 def apply_migrations(conn: sqlite3.Connection) -> None:
-    """Applies schema migrations based on PRAGMA user_version."""
+    """Applies schema migrations sequentially based on PRAGMA user_version."""
     version = get_user_version(conn)
 
     if version < 1:
         _migrate_to_v1(conn)
         conn.execute("PRAGMA user_version = 1;")
         conn.commit()
+        version = 1
+
+    if version < 2:
+        _migrate_to_v2(conn)
+        conn.execute("PRAGMA user_version = 2;")
+        conn.commit()
+        version = 2
+
+
+def _migrate_to_v2(conn: sqlite3.Connection) -> None:
+    """Migration to schema version 2: events, event_attendees, pending_approvals."""
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        google_event_id TEXT,
+        title TEXT NOT NULL,
+        starts_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        deleted_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_events_user ON events (user_id, deleted_at);
+    CREATE INDEX IF NOT EXISTS idx_events_google_id ON events (google_event_id);
+
+    CREATE TABLE IF NOT EXISTS event_attendees (
+        event_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        PRIMARY KEY (event_id, user_id),
+        FOREIGN KEY (event_id) REFERENCES events (id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_event_attendees_user ON event_attendees (user_id);
+
+    CREATE TABLE IF NOT EXISTS pending_approvals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        tool_name TEXT NOT NULL,
+        arguments TEXT NOT NULL,
+        chat_id INTEGER,
+        message_id INTEGER,
+        expires_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending'
+    );
+    CREATE INDEX IF NOT EXISTS idx_pending_approvals_user ON pending_approvals (user_id, status);
+    CREATE INDEX IF NOT EXISTS idx_pending_approvals_expires ON pending_approvals (expires_at);
+    """)
 
 
 def _migrate_to_v1(conn: sqlite3.Connection) -> None:
@@ -189,4 +236,39 @@ def check_daily_cost_limit(
     total_cost = get_total_daily_cost(conn, day=day)
     if total_cost >= MAX_TOTAL_DAILY_COST_USD:
         raise LimitExceededError(system_limit_exceeded_message(MAX_TOTAL_DAILY_COST_USD))
+
+
+def get_user_daily_events(
+    conn: sqlite3.Connection,
+    user_id: int,
+    day: str | None = None,
+) -> int:
+    """Returns the number of events created by a user on a given day."""
+    if day is None:
+        day = get_current_day()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT events_created FROM usage WHERE user_id = ? AND day = ?;",
+        (user_id, day),
+    )
+    row = cursor.fetchone()
+    return int(row["events_created"]) if row else 0
+
+
+def check_daily_event_limit(
+    conn: sqlite3.Connection,
+    user_id: int,
+    day: str | None = None,
+) -> None:
+    """Checks user daily event creation limit.
+
+    Raises LimitExceededError if limit is reached or exceeded.
+    """
+    if day is None:
+        day = get_current_day()
+
+    events_count = get_user_daily_events(conn, user_id, day=day)
+    if events_count >= MAX_USER_DAILY_EVENTS:
+        raise LimitExceededError(user_event_limit_exceeded_message(MAX_USER_DAILY_EVENTS))
+
 

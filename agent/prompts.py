@@ -31,6 +31,7 @@ ERROR_MESSAGE = "Atsiprašome, įvyko klaida apdorojant jūsų užklausą. Paban
 # Templates: the limit itself lives in db.py, the wording lives here.
 USER_LIMIT_EXCEEDED_MESSAGE = "Viršyta jūsų dienos naudojimo riba ({riba} USD). Bandykite rytoj."
 SYSTEM_LIMIT_EXCEEDED_MESSAGE = "Viršyta bendra sistemos dienos naudojimo riba ({riba} USD). Bandykite rytoj."
+EVENT_LIMIT_EXCEEDED_MESSAGE = "Viršyta jūsų dienos įvykių kūrimo riba ({riba}). Bandykite rytoj."
 BUSY_MESSAGE = "Jūsų ankstesnė užklausa dar vykdoma. Prašome palaukti."
 
 
@@ -47,6 +48,11 @@ def user_limit_exceeded_message(limit_usd: float) -> str:
 def system_limit_exceeded_message(limit_usd: float) -> str:
     """Returns the system-wide daily limit message for the given limit."""
     return SYSTEM_LIMIT_EXCEEDED_MESSAGE.format(riba=format_usd(limit_usd))
+
+
+def user_event_limit_exceeded_message(limit: int) -> str:
+    """Returns the per-user daily event creation limit message for the given limit."""
+    return EVENT_LIMIT_EXCEEDED_MESSAGE.format(riba=limit)
 
 
 def build_system_prompt(
