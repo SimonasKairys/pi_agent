@@ -1,4 +1,5 @@
 import asyncio
+import time
 from unittest.mock import AsyncMock, MagicMock
 
 from agent.llm import LLMResponse
@@ -320,3 +321,27 @@ def test_loop_token_limit():
     # Second iteration checks total_tokens >= 60000 and stops
     assert result.content == TOKEN_LIMIT_MESSAGE
     assert result.stopped_by_limit == "tokens"
+
+
+def test_loop_duration_limit_stops_a_slow_model_call():
+    """The duration budget must cut a model call, not wait for llm.py's own timeout."""
+    async def slow_generate(messages, tools=None):
+        await asyncio.sleep(5.0)
+        raise AssertionError("modelio kvietimas turėjo būti nutrauktas")
+
+    fake_llm = MagicMock()
+    fake_llm.generate = slow_generate
+
+    started = time.monotonic()
+    result = asyncio.run(run_loop(
+        fake_llm,
+        ToolRegistry(),
+        [{"role": "user", "content": "Klausimas"}],
+        max_duration=0.3,
+    ))
+    elapsed = time.monotonic() - started
+
+    assert result.stopped_by_limit == "duration"
+    assert "trukmės riba" in result.content
+    # Must return on its own budget, not after the model call finishes.
+    assert elapsed < 2.0

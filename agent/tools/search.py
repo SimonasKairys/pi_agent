@@ -14,7 +14,7 @@ import os
 from typing import Any
 import httpx
 
-from agent.tools.registry import Tool, clean_tool_result
+from agent.tools.registry import Tool
 
 logger = logging.getLogger(__name__)
 
@@ -83,13 +83,13 @@ async def search_web(
     api_key: str | None = None,
     client: httpx.AsyncClient | None = None,
 ) -> str:
-    """Searches the web and returns sanitized output marked as untrusted data."""
+    """Searches the web and returns the formatted result block.
+
+    Scrubbing and the untrusted-data marker are applied by ToolRegistry.execute().
+    """
     key = api_key or os.environ.get("TAVILY_API_KEY", "")
     if not key:
-        return clean_tool_result(
-            "Klaida: trūksta TAVILY_API_KEY aplinkos kintamojo.",
-            tool_name="search_web",
-        )
+        return "Klaida: trūksta TAVILY_API_KEY aplinkos kintamojo."
 
     try:
         raw_results = await query_tavily(
@@ -103,7 +103,9 @@ async def search_web(
         logger.exception("Klaida vykdant interneto paiešką per Tavily")
         formatted = f"Klaida vykdant paiešką: {e}"
 
-    return clean_tool_result(formatted, tool_name="search_web")
+    # ToolRegistry.execute() wraps and scrubs every result, so wrapping here too
+    # would give the model two nested untrusted-data markers.
+    return formatted
 
 
 SEARCH_TOOL = Tool(

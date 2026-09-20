@@ -207,9 +207,10 @@ def record_journal_entry(
     target_path = Path(file_path) if file_path is not None else get_journal_path(log_dir=log_dir)
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # sanitize_data() already scrubbed every string value. Re-running sanitize_text()
+    # over the serialized line would let \S+@\S+ eat the quotes around any value
+    # starting with '@', writing a corrupt line that never parses back.
     json_line = json.dumps(sanitized, ensure_ascii=False)
-    # Extra safety pass on serialized text to ensure no email address with @ survives
-    json_line = sanitize_text(json_line)
 
     with open(target_path, "a", encoding="utf-8") as f:
         f.write(json_line + "\n")

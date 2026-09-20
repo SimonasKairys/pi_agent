@@ -140,3 +140,27 @@ def test_journal_respects_piagent_log_dir_env(tmp_path: Path, monkeypatch: pytes
     assert expected_file.exists()
     assert get_journal_path() == expected_file
     assert entry["user_id"] == 333
+
+
+def test_journal_line_survives_at_sign_in_argument(tmp_path: Path):
+    """A '@' inside a tool argument must not corrupt the JSON line."""
+    log_file = tmp_path / "journal.jsonl"
+
+    for query in ["@nasa naujienos", "adresas baigiasi @", "rasyk jonas@example.com"]:
+        record_journal_entry(
+            run_id="run_at",
+            user_id=111,
+            tool_name="search_web",
+            details={"arguments": {"query": query}},
+            file_path=log_file,
+        )
+
+    entries = read_journal_entries(file_path=log_file)
+
+    # Every written line must parse back.
+    assert len(entries) == 3
+    assert sum(1 for _ in open(log_file, encoding="utf-8")) == 3
+
+    # The '@' that starts a value survives; the real address does not.
+    assert entries[0]["details"]["arguments"]["query"] == "@nasa naujienos"
+    assert "jonas@example.com" not in entries[2]["details"]["arguments"]["query"]

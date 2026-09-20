@@ -27,6 +27,7 @@ from agent.db import (
     record_usage,
     LimitExceededError,
 )
+from agent.journal import record_journal_entry
 from agent.llm import LLMClient
 from agent.loop import run_loop
 from agent.prompts import (
@@ -55,15 +56,27 @@ def get_user_lock(user_id: int) -> asyncio.Lock:
     return _user_locks[user_id]
 
 
-def make_summarizer(llm_client: LLMClient, conn: Any, user_id: int):
+def make_summarizer(llm_client: LLMClient, conn: Any, user_id: int, run_id: str | None = None):
     """Returns an async summarizer for context.build_context.
 
-    The summarization call costs tokens, so its cost is recorded against the
-    same daily budget as a normal answer.
+    The summarization call costs tokens, so it is recorded twice: against the
+    daily budget in `usage`, and in the journal that 5.3 reads costs from.
     """
     async def summarize(messages: list[dict], existing_summary: str | None = None) -> str:
         response = await llm_client.summarize(messages, existing_summary=existing_summary)
         record_usage(conn, user_id=user_id, cost_usd=response.cost_usd)
+        try:
+            record_journal_entry(
+                run_id=run_id,
+                user_id=user_id,
+                tool_name="summarize",
+                tokens=response.total_tokens,
+                cost_usd=response.cost_usd,
+                prompt_tokens=response.prompt_tokens,
+                completion_tokens=response.completion_tokens,
+            )
+        except Exception as log_err:
+            logger.warning("Klaida rašant sutraukimą į žurnalą: %s", log_err)
         return response.content
 
     return summarize
@@ -201,6 +214,8 @@ async def _answer(
     else:
         llm_client = LLMClient()
 
+    run_id = f"run_{uuid.uuid4().hex[:12]}"
+
     # Older history is summarized here. A failed summary must not block the
     # answer, so the context is rebuilt without it.
     try:
@@ -208,7 +223,7 @@ async def _answer(
             conn=conn,
             user_id=user_id,
             system_prompt=system_prompt,
-            summarize_fn=make_summarizer(llm_client, conn, user_id),
+            summarize_fn=make_summarizer(llm_client, conn, user_id, run_id),
         )
     except Exception:
         logger.exception("Nepavyko sutraukti vartotojo %d istorijos", user_id)
@@ -227,7 +242,6 @@ async def _answer(
         else:
             tool_registry = get_default_registry()
 
-        run_id = f"run_{uuid.uuid4().hex[:12]}"
         loop_result = await run_loop(
             llm_client=llm_client,
             tool_registry=tool_registry,

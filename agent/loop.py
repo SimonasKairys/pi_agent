@@ -66,6 +66,11 @@ class LoopResult:
     messages: list[dict[str, Any]] = field(default_factory=list)
 
 
+def _remaining(start_time: float, max_duration: float) -> float:
+    """Returns the seconds left in the request budget."""
+    return max_duration - (time.monotonic() - start_time)
+
+
 def _parse_tool_call(tc: Any) -> tuple[str, str, dict[str, Any], str]:
     """Extracts (call_id, function_name, parsed_args_dict, raw_args_str) from tool call."""
     if isinstance(tc, dict):
@@ -157,14 +162,22 @@ async def run_loop(
         # 3. Call LLM with retries and backoff
         llm_resp = None
         for attempt in range(MAX_RETRIES):
-            if time.monotonic() - start_time >= max_duration:
+            remaining = _remaining(start_time, max_duration)
+            if remaining <= 0:
                 break
             try:
-                llm_resp = await llm_client.generate(messages=loop_messages, tools=schemas)
+                llm_resp = await asyncio.wait_for(
+                    llm_client.generate(messages=loop_messages, tools=schemas),
+                    timeout=remaining,
+                )
+                break
+            except asyncio.TimeoutError:
+                logger.warning("Modelio kvietimas nutrauktas pasibaigus užklausos trukmės biudžetui")
+                llm_resp = None
                 break
             except Exception as e:
                 logger.warning("Klaida kviečiant modelį (bandymas %d/%d): %s", attempt + 1, MAX_RETRIES, e)
-                if attempt < MAX_RETRIES - 1:
+                if attempt < MAX_RETRIES - 1 and _remaining(start_time, max_duration) > 0:
                     delay = BACKOFF_STEPS[attempt] + random.uniform(0.0, 0.5)
                     await sleep_fn(delay)
                 else:
@@ -269,6 +282,21 @@ async def run_loop(
 
             last_call_signature = current_signature
 
+            tool_remaining = _remaining(start_time, max_duration)
+            if tool_remaining <= 0:
+                return LoopResult(
+                    content=DURATION_LIMIT_MESSAGE,
+                    total_prompt_tokens=total_prompt_tokens,
+                    total_completion_tokens=total_completion_tokens,
+                    total_tokens=total_tokens,
+                    total_cost_usd=total_cost,
+                    iterations=iteration,
+                    naudotas_internetas=naudotas_internetas,
+                    stopped_by_limit="duration",
+                    messages=loop_messages,
+                )
+            tool_timeout = min(TOOL_TIMEOUT_SECONDS, tool_remaining)
+
             try:
                 record_journal_entry(
                     run_id=run_id,
@@ -294,7 +322,7 @@ async def run_loop(
                     try:
                         result_str = await asyncio.wait_for(
                             tool_registry.execute(name, args_dict, raise_on_error=True),
-                            timeout=TOOL_TIMEOUT_SECONDS,
+                            timeout=tool_timeout,
                         )
                         break
                     except Exception as err:
@@ -305,7 +333,7 @@ async def run_loop(
                             MAX_RETRIES,
                             err,
                         )
-                        if attempt < MAX_RETRIES - 1:
+                        if attempt < MAX_RETRIES - 1 and _remaining(start_time, max_duration) > 0:
                             delay = BACKOFF_STEPS[attempt] + random.uniform(0.0, 0.5)
                             await sleep_fn(delay)
                         else:
@@ -318,7 +346,7 @@ async def run_loop(
                 try:
                     result_str = await asyncio.wait_for(
                         tool_registry.execute(name, args_dict, raise_on_error=True),
-                        timeout=TOOL_TIMEOUT_SECONDS,
+                        timeout=tool_timeout,
                     )
                 except Exception as err:
                     logger.warning("Klaida vykdant rašantį įrankį '%s' (be pakartojimo): %s", name, err)

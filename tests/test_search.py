@@ -12,7 +12,7 @@ from agent.tools.search import (
     MAX_SNIPPET_LENGTH,
     MAX_TOTAL_LENGTH,
 )
-from agent.tools.registry import UNTRUSTED_TAG_OPEN, UNTRUSTED_TAG_CLOSE
+from agent.tools.registry import UNTRUSTED_TAG_OPEN, UNTRUSTED_TAG_CLOSE, ToolRegistry
 
 
 def test_search_tool_definition():
@@ -75,12 +75,22 @@ def test_search_web_with_mock_client():
 
     result = asyncio.run(search_web("orai Vilniuje", api_key="fake-key", client=mock_client))
 
-    # Verify untrusted data tag is present
-    assert UNTRUSTED_TAG_OPEN in result
-    assert UNTRUSTED_TAG_CLOSE in result
-    assert 'irankis="search_web"' in result
+    # search_web returns the bare block; the registry adds the marker.
+    assert UNTRUSTED_TAG_OPEN not in result
     assert "Vilniaus orai" in result
     assert "Šiandien Vilniuje saulėta" in result
+
+    registry = ToolRegistry()
+    registry.register(SEARCH_TOOL)
+    wrapped = asyncio.run(registry.execute(
+        "search_web", {"query": "orai Vilniuje", "api_key": "fake-key", "client": mock_client}
+    ))
+
+    # Exactly one marker: wrapping in both places would nest them.
+    assert wrapped.count(UNTRUSTED_TAG_OPEN) == 1
+    assert wrapped.count(UNTRUSTED_TAG_CLOSE) == 1
+    assert 'irankis="search_web"' in wrapped
+    assert "Vilniaus orai" in wrapped
 
 
 def test_search_web_missing_api_key(monkeypatch: pytest.MonkeyPatch):
@@ -88,5 +98,11 @@ def test_search_web_missing_api_key(monkeypatch: pytest.MonkeyPatch):
 
     result = asyncio.run(search_web("klausimas", api_key=None))
 
-    assert UNTRUSTED_TAG_OPEN in result
+    assert UNTRUSTED_TAG_OPEN not in result
     assert "trūksta TAVILY_API_KEY" in result
+
+    registry = ToolRegistry()
+    registry.register(SEARCH_TOOL)
+    wrapped = asyncio.run(registry.execute("search_web", {"query": "klausimas"}))
+    assert wrapped.count(UNTRUSTED_TAG_OPEN) == 1
+    assert "trūksta TAVILY_API_KEY" in wrapped
