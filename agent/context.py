@@ -6,6 +6,7 @@ and manages conversation summarization.
 
 from __future__ import annotations
 
+import inspect
 import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -56,15 +57,18 @@ def get_latest_summary(conn: sqlite3.Connection, user_id: int) -> dict[str, Any]
     return dict(row)
 
 
-def check_and_summarize(
+async def check_and_summarize(
     conn: sqlite3.Connection,
     user_id: int,
-    summarize_fn: Callable[..., str],
+    summarize_fn: Callable[..., Any],
 ) -> str | None:
     """Checks if un-summarized messages exceed SUMMARIZE_THRESHOLD (40).
 
     If so, summarizes older messages beyond the last VERBATIM_MESSAGES_COUNT (20)
     and stores a new entry in the summaries table.
+
+    summarize_fn may be synchronous or asynchronous: the production summarizer
+    calls the model, so an awaitable result is awaited here.
     """
     latest_summary = get_latest_summary(conn, user_id)
     last_covered_id = latest_summary["covers_until_msg_id"] if latest_summary else 0
@@ -86,9 +90,13 @@ def check_and_summarize(
 
     existing_summary_text = latest_summary["content"] if latest_summary else None
     try:
-        new_summary = summarize_fn(messages_to_summarize, existing_summary=existing_summary_text)
+        result = summarize_fn(messages_to_summarize, existing_summary=existing_summary_text)
     except TypeError:
-        new_summary = summarize_fn(messages_to_summarize)
+        result = summarize_fn(messages_to_summarize)
+
+    if inspect.isawaitable(result):
+        result = await result
+    new_summary = str(result)
 
     now = datetime.now(timezone.utc).isoformat()
     conn.execute(
@@ -99,12 +107,12 @@ def check_and_summarize(
     return new_summary
 
 
-def build_context(
+async def build_context(
     conn: sqlite3.Connection,
     user_id: int,
     system_prompt: str,
     current_query: str | None = None,
-    summarize_fn: Callable[..., str] | None = None,
+    summarize_fn: Callable[..., Any] | None = None,
     max_context_tokens: int = MAX_CONTEXT_TOKENS,
 ) -> list[dict[str, str]]:
     """Builds the messages list for the model within context token limits.
@@ -116,7 +124,7 @@ def build_context(
     4. Current query (if provided)
     """
     if summarize_fn is not None:
-        check_and_summarize(conn, user_id, summarize_fn)
+        await check_and_summarize(conn, user_id, summarize_fn)
 
     latest_summary = get_latest_summary(conn, user_id)
     last_covered_id = latest_summary["covers_until_msg_id"] if latest_summary else 0

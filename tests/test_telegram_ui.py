@@ -197,3 +197,58 @@ def test_handle_message_limit_exceeded(tmp_path: Path, monkeypatch: pytest.Monke
     reply = update.message.reply_text.call_args[0][0]
     assert "Viršyta" in reply
 
+
+
+def test_handle_message_summarizes_long_history(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Long histories must reach the summarizer, not be silently truncated."""
+    db_file = tmp_path / "test.db"
+    monkeypatch.setattr("agent.db.get_db_path", lambda: db_file)
+    monkeypatch.setattr("agent.telegram_ui.get_connection", lambda: get_connection(db_file))
+
+    authorized_user = User(
+        telegram_id=111,
+        name="Simonas",
+        email="simonas@example.com",
+        timezone="Europe/Vilnius",
+    )
+    monkeypatch.setattr("agent.telegram_ui.load_users", lambda: [authorized_user])
+
+    fake_llm = MagicMock()
+    fake_llm.generate = AsyncMock(return_value=LLMResponse(
+        content="Atsakymas", prompt_tokens=20, completion_tokens=10,
+        total_tokens=30, cost_usd=0.0,
+    ))
+    fake_llm.summarize = AsyncMock(return_value=LLMResponse(
+        content="Santrauka iš modelio", prompt_tokens=100, completion_tokens=50,
+        total_tokens=150, cost_usd=0.0,
+    ))
+
+    def make_update(text: str):
+        update = MagicMock()
+        update.effective_chat.type = "private"
+        update.effective_user.id = 111
+        update.message.text = text
+        update.message.reply_text = AsyncMock()
+        update.message.chat.send_action = AsyncMock()
+        return update
+
+    context = MagicMock()
+    context.bot_data = {"llm_client": fake_llm}
+
+    async def drive():
+        for i in range(25):
+            await handle_message(make_update(f"Žinutė {i}"), context)
+
+    asyncio.run(drive())
+
+    # 25 exchanges produce 50 messages, which crosses the 40-message threshold.
+    fake_llm.summarize.assert_awaited()
+
+    conn = get_connection(db_file)
+    summaries = conn.execute("SELECT content FROM summaries").fetchall()
+    assert len(summaries) >= 1
+    assert summaries[0]["content"] == "Santrauka iš modelio"
+
+    # The summary must reach the model in the final call.
+    sent = fake_llm.generate.call_args[1]["messages"]
+    assert any("Santrauka iš modelio" in m["content"] for m in sent)

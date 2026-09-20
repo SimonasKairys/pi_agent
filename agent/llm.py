@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 from openai import AsyncOpenAI
 from agent.db import calculate_cost
+from agent.prompts import SUMMARY_SYSTEM_PROMPT, build_summary_prompt
 
 # Settings from TASK.md "Architektūra" and "Sprendimai ir skaičiai"
 DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash"
@@ -74,4 +75,20 @@ class LLMClient:
             total_tokens=total_tokens,
             cost_usd=cost_usd,
             raw_response=response,
+        )
+
+    async def summarize(
+        self,
+        messages: list[dict],
+        existing_summary: str | None = None,
+    ) -> LLMResponse:
+        """Summarizes older conversation messages into a single Lithuanian summary.
+
+        Returns the full LLMResponse so the caller can record the cost.
+        """
+        return await self.generate(
+            messages=[
+                {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
+                {"role": "user", "content": build_summary_prompt(messages, existing_summary)},
+            ]
         )

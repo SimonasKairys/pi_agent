@@ -52,6 +52,20 @@ def get_user_lock(user_id: int) -> asyncio.Lock:
     return _user_locks[user_id]
 
 
+def make_summarizer(llm_client: LLMClient, conn: Any, user_id: int):
+    """Returns an async summarizer for context.build_context.
+
+    The summarization call costs tokens, so its cost is recorded against the
+    same daily budget as a normal answer.
+    """
+    async def summarize(messages: list[dict], existing_summary: str | None = None) -> str:
+        response = await llm_client.summarize(messages, existing_summary=existing_summary)
+        record_usage(conn, user_id=user_id, cost_usd=response.cost_usd)
+        return response.content
+
+    return summarize
+
+
 def split_message(text: str, limit: int = SPLIT_LIMIT) -> list[str]:
     """Splits a long message into chunks under limit characters.
 
@@ -157,17 +171,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             timezone_name=user.timezone,
             allowed_names=allowed_names,
         )
-        messages = build_context(
-            conn=conn,
-            user_id=user_id,
-            system_prompt=system_prompt,
-        )
-
         llm_client: LLMClient
         if context and hasattr(context, "bot_data") and "llm_client" in context.bot_data:
             llm_client = context.bot_data["llm_client"]
         else:
             llm_client = LLMClient()
+
+        # Older history is summarized here. A failed summary must not block the
+        # answer, so the context is rebuilt without it.
+        try:
+            messages = await build_context(
+                conn=conn,
+                user_id=user_id,
+                system_prompt=system_prompt,
+                summarize_fn=make_summarizer(llm_client, conn, user_id),
+            )
+        except Exception:
+            logger.exception("Nepavyko sutraukti vartotojo %d istorijos", user_id)
+            messages = await build_context(
+                conn=conn,
+                user_id=user_id,
+                system_prompt=system_prompt,
+            )
 
         await update.message.chat.send_action(action="typing")
 
