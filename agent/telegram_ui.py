@@ -38,7 +38,12 @@ from agent.prompts import (
 )
 from agent.tools.registry import ToolRegistry
 from agent.tools.search import SEARCH_TOOL
-from agent.tools.calendar import LIST_EVENTS_TOOL, make_list_events_tool
+from agent.tools.calendar import (
+    CREATE_EVENT_TOOL,
+    LIST_EVENTS_TOOL,
+    make_create_event_tool,
+    make_list_events_tool,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -188,8 +193,17 @@ def get_default_registry(
                 composio_client=composio_client,
             )
         )
+        registry.register(
+            make_create_event_tool(
+                conn=conn,
+                user_id=user.telegram_id,
+                timezone_str=user.timezone,
+                composio_client=composio_client,
+            )
+        )
     else:
         registry.register(LIST_EVENTS_TOOL)
+        registry.register(CREATE_EVENT_TOOL)
     return registry
 
 

@@ -14,8 +14,8 @@ from datetime import datetime
 from functools import partial
 from typing import Any
 
-from agent.config import get_user_by_id
-from agent.db import get_connection
+from agent.config import get_user_by_id, get_user_by_name
+from agent.db import check_daily_event_limit, get_connection, record_usage
 from agent.tools.registry import Tool
 
 logger = logging.getLogger(__name__)
@@ -322,3 +322,229 @@ def make_list_events_tool(
             connected_account_id=connected_account_id,
         ),
     )
+
+
+def create_event(
+    title: str,
+    start: str,
+    end: str,
+    attendees: list[str],
+    description: str = "",
+    conn: sqlite3.Connection | None = None,
+    user_id: int | None = None,
+    composio_client: Any = None,
+    timezone_str: str = "Europe/Vilnius",
+    connected_account_id: str | None = None,
+) -> str:
+    """Creates a calendar event and sends invitations to authorized attendees.
+
+    Requires attendees to be recognized users in users.toml.
+    Enforces per-user daily event creation limits.
+    Sets send_updates='all', guests_can_invite_others=False,
+    guests_can_see_other_guests=False, and create_meeting_room=False.
+    Records event in events and event_attendees tables, and increments usage.
+    """
+    if user_id is None:
+        raise ValueError("Trūksta vartotojo identifikatoriaus (user_id)")
+
+    title = title.strip()
+    if not title:
+        raise ValueError("Įvykio pavadinimas negali būti tuščias")
+
+    if not isinstance(attendees, list):
+        if isinstance(attendees, str):
+            attendees = [attendees]
+        else:
+            attendees = list(attendees)
+
+    # Validate attendees: each must exist in users.toml
+    attendee_emails: list[str] = []
+    attendee_user_ids: list[int] = []
+    for att_name in attendees:
+        clean_name = str(att_name).strip()
+        if not clean_name:
+            continue
+        try:
+            u = get_user_by_name(clean_name)
+        except Exception as e:
+            raise ValueError(
+                f"Dalyvis '{clean_name}' neleidžiamas: galima kviesti tik registruotus vartotojus"
+            ) from e
+        attendee_emails.append(u.email)
+        attendee_user_ids.append(u.telegram_id)
+
+    dt_start = parse_date_input(start, timezone_name=timezone_str, is_end_of_day=False)
+    dt_end = parse_date_input(end, timezone_name=timezone_str, is_end_of_day=False)
+
+    if dt_end <= dt_start:
+        raise ValueError("Pabaigos laikas negali būti ankstesnis arba lygus pradžios laikui")
+
+    if len(description) > MAX_DESCRIPTION_LENGTH:
+        description = description[:MAX_DESCRIPTION_LENGTH]
+
+    close_conn = False
+    if conn is None:
+        conn = get_connection()
+        close_conn = True
+
+    try:
+        # Enforce daily event limit
+        check_daily_event_limit(conn, user_id)
+
+        client = composio_client
+        if client is None:
+            api_key = os.environ.get("COMPOSIO_API_KEY")
+            if not api_key:
+                raise ValueError("Trūksta COMPOSIO_API_KEY aplinkos kintamojo")
+            from composio import Composio
+            client = Composio(api_key=api_key)
+
+        conn_id = connected_account_id or os.environ.get("COMPOSIO_CONNECTED_ACCOUNT_ID")
+
+        acc_user_id = None
+        if hasattr(client, "connected_accounts") and conn_id:
+            try:
+                acc = client.connected_accounts.get(conn_id)
+                acc_user_id = getattr(acc, "user_id", None)
+            except Exception as e:
+                logger.warning("Nepavyko gauti Composio acc.user_id: %s", e)
+
+        arguments = {
+            "calendar_id": "primary",
+            "calendarId": "primary",
+            "summary": title,
+            "start_datetime": dt_start.isoformat(),
+            "end_datetime": dt_end.isoformat(),
+            "timezone": timezone_str,
+            "attendees": attendee_emails,
+            "description": description,
+            "send_updates": "all",
+            "sendUpdates": "all",
+            "guests_can_invite_others": False,
+            "guestsCanInviteOthers": False,
+            "guests_can_see_other_guests": False,
+            "guestsCanSeeOtherGuests": False,
+            "create_meeting_room": False,
+        }
+
+        exec_kwargs: dict[str, Any] = {
+            "slug": "GOOGLECALENDAR_CREATE_EVENT",
+            "arguments": arguments,
+            "dangerously_skip_version_check": True,
+        }
+        if conn_id:
+            exec_kwargs["connected_account_id"] = conn_id
+        if acc_user_id:
+            exec_kwargs["user_id"] = acc_user_id
+
+        resp = client.tools.execute(**exec_kwargs)
+
+        if isinstance(resp, dict) and not resp.get("successful", True):
+            err_msg = resp.get("error") or resp.get("message") or "Nežinoma klaida"
+            raise RuntimeError(f"Klaida kuriant įvykį kalendoriuje: {err_msg}")
+
+        # Extract google_event_id
+        google_event_id = None
+        if isinstance(resp, dict):
+            data = resp.get("data", {})
+            if isinstance(data, dict):
+                google_event_id = data.get("id") or data.get("response_data", {}).get("id")
+            if not google_event_id:
+                google_event_id = resp.get("id")
+        if not google_event_id:
+            google_event_id = f"g_evt_{int(datetime.now().timestamp())}"
+
+        created_at_str = datetime.now(zoneinfo.ZoneInfo(timezone_str)).isoformat()
+
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO events (user_id, google_event_id, title, starts_at, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (user_id, str(google_event_id), title, dt_start.isoformat(), created_at_str),
+        )
+        local_event_id = cur.lastrowid
+
+        for att_uid in attendee_user_ids:
+            conn.execute(
+                "INSERT OR IGNORE INTO event_attendees (event_id, user_id) VALUES (?, ?)",
+                (local_event_id, att_uid),
+            )
+
+        record_usage(conn, user_id=user_id, cost_usd=0.0, events_created=1)
+        conn.commit()
+
+        time_str = _format_event_time(
+            {"dateTime": dt_start.isoformat()},
+            {"dateTime": dt_end.isoformat()},
+            tz_name=timezone_str,
+        )
+        att_str = f" (dalyviai: {', '.join(attendees)})" if attendees else ""
+        return f"Įvykis sukurtas [Nr. {local_event_id}]: {title}, laikas: {time_str}{att_str}"
+
+    finally:
+        if close_conn:
+            conn.close()
+
+
+CREATE_EVENT_TOOL = Tool(
+    name="create_event",
+    description=(
+        "sukuria įvykį ir išsiunčia kvietimus nurodytiems žmonėms. "
+        "Naudok tik turėdamas pavadinimą, pradžią ir pabaigą. "
+        "Nenaudok esamam įvykiui keisti."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Įvykio pavadinimas",
+            },
+            "start": {
+                "type": "string",
+                "description": "Pradžios laikas vietiniu laiku be zonos (pvz. 2026-09-20T15:00)",
+            },
+            "end": {
+                "type": "string",
+                "description": "Pabaigos laikas vietiniu laiku be zonos (pvz. 2026-09-20T16:00)",
+            },
+            "attendees": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Dalyvių vardai (iš leistinų vartotojų sąrašo, ne el. pašto adresai)",
+            },
+            "description": {
+                "type": "string",
+                "description": "Papildomas įvykio aprašymas (neprivalomas)",
+            },
+        },
+        "required": ["title", "start", "end", "attendees"],
+    },
+    risk="destructive",
+    func=create_event,
+)
+
+
+def make_create_event_tool(
+    conn: sqlite3.Connection,
+    user_id: int,
+    timezone_str: str = "Europe/Vilnius",
+    composio_client: Any = None,
+    connected_account_id: str | None = None,
+) -> Tool:
+    """Creates a user-bound create_event tool instance for registration."""
+    return Tool(
+        name=CREATE_EVENT_TOOL.name,
+        description=CREATE_EVENT_TOOL.description,
+        parameters=CREATE_EVENT_TOOL.parameters,
+        risk=CREATE_EVENT_TOOL.risk,
+        func=partial(
+            create_event,
+            conn=conn,
+            user_id=user_id,
+            timezone_str=timezone_str,
+            composio_client=composio_client,
+            connected_account_id=connected_account_id,
+        ),
+    )
+
