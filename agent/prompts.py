@@ -10,7 +10,7 @@ SYSTEM_PROMPT_TEMPLATE = """Tu esi asmeninis pagalbininkas, pasiekiamas per Tele
 trumpai ir dalykiškai.
 
 Dabar yra {data_laikas} ({laiko_juosta}). Kalbiesi su vartotoju {vardas}.
-Kalendoriuje gali kviesti tik šiuos žmones: {vardu_sarasas}.
+Kalendoriuje gali kviesti tik šiuos žmones: {vardu_sarasas}.{faktu_blokas}
 
 Įrankiai:
 - Kviesk įrankį tik tada, kai jo tikrai reikia. Į paprastą klausimą atsakyk iškart.
@@ -66,8 +66,9 @@ def build_system_prompt(
     timezone_name: str = "Europe/Vilnius",
     allowed_names: list[str] | None = None,
     current_time_str: str | None = None,
+    facts: list[str] | list[Any] | None = None,
 ) -> str:
-    """Builds the system prompt with time, user name, and allowed participants."""
+    """Builds the system prompt with time, user name, allowed participants, and facts."""
     if current_time_str is None:
         try:
             tz = zoneinfo.ZoneInfo(timezone_name)
@@ -77,11 +78,28 @@ def build_system_prompt(
 
     allowed_str = ", ".join(allowed_names) if allowed_names else "nėra kitų dalyvių"
 
+    faktu_blokas = ""
+    if facts:
+        fact_lines = []
+        for item in facts:
+            if isinstance(item, dict) and "fact" in item:
+                fact_lines.append(f"- {item['fact']}")
+            elif hasattr(item, "__getitem__") and not isinstance(item, (str, bytes)):
+                try:
+                    fact_lines.append(f"- {item['fact']}")
+                except Exception:
+                    fact_lines.append(f"- {item}")
+            else:
+                fact_lines.append(f"- {item}")
+        if fact_lines:
+            faktu_blokas = "\n\nŽinomi faktai apie vartotoją:\n" + "\n".join(fact_lines)
+
     return SYSTEM_PROMPT_TEMPLATE.format(
         data_laikas=current_time_str,
         laiko_juosta=timezone_name,
         vardas=name,
         vardu_sarasas=allowed_str,
+        faktu_blokas=faktu_blokas,
     )
 
 

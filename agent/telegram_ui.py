@@ -40,6 +40,7 @@ from agent.approvals import (
 from agent.journal import record_journal_entry
 from agent.llm import LLMClient
 from agent.loop import run_loop
+from agent.memory import get_user_facts
 from agent.prompts import (
     APPROVAL_EXPIRED_MESSAGE,
     APPROVAL_PENDING_MESSAGE,
@@ -354,10 +355,12 @@ async def _answer(
         all_users = [user]
 
     allowed_names = [u.name for u in all_users if u.telegram_id != user_id]
+    user_facts = get_user_facts(conn, user_id)
     system_prompt = build_system_prompt(
         name=user.name,
         timezone_name=user.timezone,
         allowed_names=allowed_names,
+        facts=[f["fact"] for f in user_facts],
     )
     llm_client: LLMClient
     if context and hasattr(context, "bot_data") and "llm_client" in context.bot_data:
