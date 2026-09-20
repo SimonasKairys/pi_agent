@@ -1,0 +1,36 @@
+{
+  "id": "07_update_event_requires_approval",
+  "description": "Įvykio atnaujinimas visada reikalauja patvirtinimo kortelės",
+  "user_message": "Pakeisk įvykio 1 laiką į 2026-10-05T14:00",
+  "llm_plan": [
+    {
+      "content": "",
+      "tool_calls": [
+        {
+          "name": "update_event",
+          "arguments": {
+            "event_id": 1,
+            "start": "2026-10-05T14:00",
+            "end": "2026-10-05T15:00"
+          }
+        }
+      ]
+    },
+    {
+      "content": "Pateikiau prašymą pakeisti įvykio laiką. Patvirtinkite mygtuku.",
+      "tool_calls": null
+    }
+  ],
+  "expected_tools": ["update_event"],
+  "expected_approval": true,
+  "initial_events": [
+    {
+      "id": 1,
+      "user_id": 111,
+      "google_event_id": "g1_upd",
+      "title": "Svarbus susitikimas",
+      "starts_at": "2026-10-01T10:00:00",
+      "attendees": [222]
+    }
+  ]
+}

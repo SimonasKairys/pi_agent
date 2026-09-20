@@ -1,0 +1,29 @@
+{
+  "id": "04_create_event_with_attendee",
+  "description": "Įvykio sukūrimas su žinomu dalyviu be paieškos (vykdomas automatiškai)",
+  "user_message": "Suplanuok susitikimą 'Projekto aptarimas' su Rūta rytoj nuo 14:00 iki 15:00",
+  "llm_plan": [
+    {
+      "content": "",
+      "tool_calls": [
+        {
+          "name": "create_event",
+          "arguments": {
+            "title": "Projekto aptarimas",
+            "start": "2026-09-21T14:00",
+            "end": "2026-09-21T15:00",
+            "attendees": ["Rūta"],
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "content": "Susitikimas 'Projekto aptarimas' su Rūta sėkmingai sukurtas.",
+      "tool_calls": null
+    }
+  ],
+  "expected_tools": ["create_event"],
+  "expected_approval": false,
+  "initial_events": []
+}

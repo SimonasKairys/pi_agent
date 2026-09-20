@@ -1,0 +1,35 @@
+{
+  "id": "03_list_events_current_week",
+  "description": "Savaitės susitikimų peržiūra kalendoriuje",
+  "user_message": "Kokie mano susitikimai suplanuoti šią savaitę?",
+  "llm_plan": [
+    {
+      "content": "",
+      "tool_calls": [
+        {
+          "name": "list_events",
+          "arguments": {
+            "date_from": "2026-09-20T00:00:00",
+            "date_to": "2026-09-27T23:59:59"
+          }
+        }
+      ]
+    },
+    {
+      "content": "Turite vieną susitikimą: Nr. 1 'Komandos susirinkimas', 2026-09-22 10:00.",
+      "tool_calls": null
+    }
+  ],
+  "expected_tools": ["list_events"],
+  "expected_approval": false,
+  "initial_events": [
+    {
+      "id": 1,
+      "user_id": 111,
+      "google_event_id": "g1_komanda",
+      "title": "Komandos susirinkimas",
+      "starts_at": "2026-09-22T10:00:00",
+      "attendees": [222]
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "id": "08_search_then_create_tainted",
+  "description": "Įvykio kūrimas po interneto paieškos tame pačiame vykdyme reikalauja patvirtinimo",
+  "user_message": "Rask kada vyksta konferencija ir įtrauk į kalendorių",
+  "llm_plan": [
+    {
+      "content": "",
+      "tool_calls": [
+        {
+          "name": "search_web",
+          "arguments": {
+            "query": "konferencija pradžios laikas"
+          }
+        }
+      ]
+    },
+    {
+      "content": "",
+      "tool_calls": [
+        {
+          "name": "create_event",
+          "arguments": {
+            "title": "Konferencija",
+            "start": "2026-11-01T09:00",
+            "end": "2026-11-01T17:00",
+            "attendees": [],
+            "description": "Rasta internete"
+          }
+        }
+      ]
+    },
+    {
+      "content": "Radau informaciją apie konferenciją. Kadangi informacija iš interneto, prašau patvirtinti sukūrimą.",
+      "tool_calls": null
+    }
+  ],
+  "expected_tools": ["search_web", "create_event"],
+  "expected_approval": true,
+  "initial_events": []
+}

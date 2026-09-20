@@ -1,0 +1,25 @@
+{
+  "id": "02_search_web_query",
+  "description": "Interneto paieškos užklausa apie faktą",
+  "user_message": "Koks yra didžiausias Lietuvos miestas?",
+  "llm_plan": [
+    {
+      "content": "",
+      "tool_calls": [
+        {
+          "name": "search_web",
+          "arguments": {
+            "query": "didžiausias Lietuvos miestas"
+          }
+        }
+      ]
+    },
+    {
+      "content": "Didžiausias Lietuvos miestas pagal gyventojų skaičių ir plotą yra Vilnius.",
+      "tool_calls": null
+    }
+  ],
+  "expected_tools": ["search_web"],
+  "expected_approval": false,
+  "initial_events": []
+}

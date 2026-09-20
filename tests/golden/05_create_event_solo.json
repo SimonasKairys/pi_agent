@@ -1,0 +1,29 @@
+{
+  "id": "05_create_event_solo",
+  "description": "Asmeninio įvykio sukūrimas be dalyvių (vykdomas automatiškai)",
+  "user_message": "Pridėk įvykį 'Sporto treniruotė' penktadienį 18:00 iki 19:30",
+  "llm_plan": [
+    {
+      "content": "",
+      "tool_calls": [
+        {
+          "name": "create_event",
+          "arguments": {
+            "title": "Sporto treniruotė",
+            "start": "2026-09-25T18:00",
+            "end": "2026-09-25T19:30",
+            "attendees": [],
+            "description": "Sporto salė"
+          }
+        }
+      ]
+    },
+    {
+      "content": "Įvykis 'Sporto treniruotė' sukurtas.",
+      "tool_calls": null
+    }
+  ],
+  "expected_tools": ["create_event"],
+  "expected_approval": false,
+  "initial_events": []
+}

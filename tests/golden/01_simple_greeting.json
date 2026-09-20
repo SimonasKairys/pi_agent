@@ -1,0 +1,14 @@
+{
+  "id": "01_simple_greeting",
+  "description": "Paprastas pasisveikinimas be įrankių kvietimo",
+  "user_message": "Labas! Kaip gyveni?",
+  "llm_plan": [
+    {
+      "content": "Labas! Esu asmeninis pagalbininkas, kuo galiu padėti?",
+      "tool_calls": null
+    }
+  ],
+  "expected_tools": [],
+  "expected_approval": false,
+  "initial_events": []
+}

@@ -1,0 +1,14 @@
+{
+  "id": "10_reasoning_no_tool",
+  "description": "Atsakymas į loginį/tekstinį klausimą nenaudojant jokių įrankių",
+  "user_message": "Kiek dienų turi keliamieji metai ir kodėl?",
+  "llm_plan": [
+    {
+      "content": "Keliamieji metai turi 366 dienas (vietoj įprastų 365), nes pridedama vasario 29 diena.",
+      "tool_calls": null
+    }
+  ],
+  "expected_tools": [],
+  "expected_approval": false,
+  "initial_events": []
+}
