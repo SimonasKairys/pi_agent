@@ -58,3 +58,18 @@ def test_messages_are_lithuanian():
     assert "Atsiprašome" in ERROR_MESSAGE
     assert "riba" in USER_LIMIT_EXCEEDED_MESSAGE
     assert "riba" in SYSTEM_LIMIT_EXCEEDED_MESSAGE
+
+
+def test_system_prompt_contains_today_date_in_user_timezone():
+    import zoneinfo
+    from datetime import datetime
+
+    for tz_name in ["Europe/Vilnius", "America/New_York"]:
+        now = datetime.now(zoneinfo.ZoneInfo(tz_name))
+        today_date = now.strftime("%Y-%m-%d")
+        prompt = build_system_prompt(name="Simonas", timezone_name=tz_name)
+
+        assert today_date in prompt
+        assert tz_name in prompt
+        assert "Simonas" in prompt
+
