@@ -3,13 +3,10 @@
 import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
-import pytest
 
 from agent.db import get_connection
 from agent.llm import LLMResponse
 from agent.memory import (
-    IMPORTANCE_THRESHOLD,
-    MAX_USER_FACTS,
     delete_fact,
     extract_and_save_facts,
     extract_facts,

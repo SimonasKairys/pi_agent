@@ -8,7 +8,6 @@ from agent.db import (
     LimitExceededError,
     _migrate_to_v1,
     _migrate_to_v2,
-    _migrate_to_v3,
     check_daily_event_limit,
     get_connection,
     get_user_daily_events,

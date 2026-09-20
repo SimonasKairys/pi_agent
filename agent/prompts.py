@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import zoneinfo
 from datetime import datetime
+from typing import Any
 
 SYSTEM_PROMPT_TEMPLATE = """Tu esi asmeninis pagalbininkas, pasiekiamas per Telegram. Atsakinėji lietuvių kalba,
 trumpai ir dalykiškai.
