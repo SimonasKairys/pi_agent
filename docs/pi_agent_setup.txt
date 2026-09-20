@@ -50,8 +50,8 @@ set up the virtual environment
 Jei turite sena venv is telegram-agent.old, galite ja perkelti ir pip install praleisti:
 	sudo -u piagent mv /home/piagent/telegram-agent.old/venv /home/piagent/telegram-agent/venv
 -----------------------------------------------
-Install the libraries (telegram, openrouter, dotenv):
-	sudo -u piagent /home/piagent/telegram-agent/venv/bin/pip install python-telegram-bot openai python-dotenv
+Install the libraries (saraso rasyti ranka nereikia, jis yra requirements.txt):
+	sudo -u piagent /home/piagent/telegram-agent/venv/bin/pip install -r /home/piagent/telegram-agent/requirements.txt
 	telegram api: gaunamas is @BotFather (/newbot)
 	openrouter api: openrouter.ai raktu skiltyje
 	model_name: deepseek/deepseek-v4.1-flash
@@ -67,7 +67,9 @@ Create the secrets file:
 Paste (be kabuciu, be tarpu aplink =, savo reiksmes):
 OPENROUTER_API_KEY=jusu_openrouter_raktas
 TELEGRAM_BOT_TOKEN=jusu_telegram_tokenas
-TELEGRAM_ALLOWED_USER_IDS=111111,222222
+TAVILY_API_KEY=jusu_tavily_raktas
+COMPOSIO_API_KEY=jusu_composio_raktas
+COMPOSIO_CONNECTED_ACCOUNT_ID=prijungtos_paskyros_id
 
 Apribokite teises:
 	sudo chown root:root /etc/piagent/env
@@ -75,6 +77,38 @@ Apribokite teises:
 Patikrinkite (rodo tik pavadinimus):
 	sudo cut -d= -f1 /etc/piagent/env
 Savo Telegram ID sužinosite parašę botui @userinfobot.
+-----------------------------------------------
+Kas gali naudotis botu: /etc/piagent/users.toml
+Anksciau tam buvo TELEGRAM_ALLOWED_USER_IDS aplinkos kintamasis. Jo nebera:
+botas skaito tik si faila, o kiekvienas vartotojas turi varda, el. pasta ir
+laiko juosta. Vardai privalo buti unikalus, nes modelis dalyvius nurodo vardais.
+
+	sudo nano /etc/piagent/users.toml
+
+Paste (savo reiksmes):
+[[user]]
+telegram_id = 111111111
+name = "Simonas"
+email = "vardas@example.com"
+timezone = "Europe/Vilnius"
+role = "admin"
+
+[[user]]
+telegram_id = 222222222
+name = "Ruta"
+email = "ruta@example.com"
+timezone = "Europe/Vilnius"
+role = "member"
+
+Apribokite teises (procesas skaito, bet perrasyti negali):
+	sudo chown root:piagent /etc/piagent/users.toml
+	sudo chmod 640 /etc/piagent/users.toml
+
+Pakeitus faila reikia perkrauti paslauga:
+	sudo systemctl restart piagent
+Jei faile yra klaida (pasikartojantis vardas, bloga laiko juosta, el. pastas be @),
+botas nestartuoja ir priezasti iraso i zurnala:
+	sudo journalctl -u piagent -n 20 --no-pager
 -----------------------------------------------
 Create the service file:
 	sudo nano /etc/systemd/system/piagent.service
