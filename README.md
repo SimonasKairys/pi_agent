@@ -79,6 +79,10 @@ venv/bin/python bot.py
 For a hardened Raspberry Pi deployment with systemd, a dedicated user, nightly consolidation, and
 backups, see the [deployment guide](docs/setup.md) (in Lithuanian).
 
+To let an AI assistant guide the installation, give it the
+[step-by-step LLM install instructions](docs/llm-install.md). They are written for small models
+(3B parameters and up), and the assistant first asks which language you want to use.
+
 ## Configuration
 
 | Variable | Required | Description |

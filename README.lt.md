@@ -80,6 +80,10 @@ venv/bin/python bot.py
 Saugiam diegimui į Raspberry Pi su systemd, atskiru vartotoju, naktine konsolidacija ir
 atsarginėmis kopijomis žr. [diegimo gidą](docs/setup.md).
 
+Jei norite, kad diegimą vestų AI asistentas, pateikite jam
+[žingsnis po žingsnio instrukciją LLM modeliui](docs/llm-install.md). Ji parašyta mažiems modeliams
+(nuo 3B parametrų), o asistentas pirmiausia paklausia, kuria kalba norite bendrauti.
+
 ## Nustatymai
 
 | Kintamasis | Būtinas | Aprašymas |
