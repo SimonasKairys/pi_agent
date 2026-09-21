@@ -1,7 +1,7 @@
 # Install pi_agent: instructions for an AI assistant
 
 You are an AI assistant. You help a user install pi_agent on a Raspberry Pi.
-pi_agent is a Telegram bot. The bot replies to its users in Lithuanian.
+pi_agent is a Telegram bot. It talks to each user in Lithuanian or English.
 The recommended system is Ubuntu Server 24.04 LTS (64-bit). This guide is tested only on it.
 
 Read all rules first. Then do the steps in order, from Step 0 to Step 13.
@@ -186,6 +186,7 @@ Ask the user for each person who may use the bot:
 - Name (must be unique)
 - Email
 - Time zone (for example `Europe/Vilnius`)
+- Language: `lt` (Lithuanian) or `en` (English)
 
 The first person gets `role = "admin"`. Everyone else gets `role = "member"`.
 
@@ -200,6 +201,7 @@ name = "<NAME>"
 email = "<EMAIL>"
 timezone = "<TIME_ZONE>"
 role = "admin"
+language = "<LANGUAGE>"
 EOF
 sudo chown root:piagent /etc/piagent/users.toml
 sudo chmod 640 /etc/piagent/users.toml

@@ -223,6 +223,7 @@ name = "Ruta"
 email = "ruta@example.com"
 timezone = "Europe/Vilnius"
 role = "member"
+language = "en"
 
 # Svečiai (nebūtini): juos galima kviesti į įvykius, bet botu jie naudotis negali.
 [[guest]]
@@ -230,6 +231,10 @@ name = "Jonas"
 email = "jonas@example.org"
 ```
 
+- `language` nebūtinas: `lt` (numatytoji) arba `en`. Juo botas atsako, rodo `/pagalba`, patvirtinimo
+  korteles, priminimus ir komandų meniu. Anglakalbiams komandos yra `/help` ir `/costs`, bet
+  `/pagalba` ir `/islaidos` veikia visiems. Svečiams kalbos nustatyti nereikia, nes botu jie
+  nesinaudoja: kvietimus jiems siunčia Google jų paskyros kalba.
 - Vardai turi būti unikalūs tarp vartotojų ir svečių, nes modelis dalyvius nurodo vardais.
 - Agentas kviečia tik žmones iš šio sąrašo. El. pašto adreso, kurio sąraše nėra, pridėti jis negali.
 - Pašalinus svečią iš failo, įvykių, kuriuose jis dalyvauja, keisti nebegalima, kol jo

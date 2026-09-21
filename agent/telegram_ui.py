@@ -11,7 +11,7 @@ import contextlib
 import logging
 import uuid
 from typing import Any
-from telegram import Update
+from telegram import BotCommandScopeChat, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -50,16 +50,13 @@ from agent.llm import LLMClient
 from agent.loop import run_loop
 from agent.memory import extract_and_save_facts, get_user_facts
 from agent.prompts import (
-    APPROVAL_EXPIRED_MESSAGE,
     APPROVAL_PENDING_MESSAGE,
-    BOT_COMMANDS,
     ERROR_MESSAGE,
-    HELP_MESSAGE,
-    START_MESSAGE,
-    UNAUTHORIZED_MESSAGE,
     build_system_prompt,
-    format_usd,
+    bot_commands,
 )
+from agent.i18n import format_usd, format_usd_precise, language_from_telegram
+from agent.i18n import t as tr
 from agent.tools.registry import ToolRegistry
 from agent.tools.search import SEARCH_TOOL
 from agent.tools.calendar import (
@@ -155,6 +152,12 @@ def split_message(text: str, limit: int = SPLIT_LIMIT) -> list[str]:
     return chunks
 
 
+def _language_of(telegram_id: int | None) -> str:
+    """Returns a user's language from users.toml, or Lithuanian if unknown."""
+    user = get_authorized_user(telegram_id) if telegram_id is not None else None
+    return user.language if user else "lt"
+
+
 def get_authorized_user(telegram_id: int) -> User | None:
     """Finds and returns a User by telegram_id from users.toml, or None."""
     try:
@@ -167,23 +170,50 @@ def get_authorized_user(telegram_id: int) -> User | None:
     return None
 
 
+def _unauthorized_text(update: Update) -> str:
+    """The refusal for people not in users.toml, in their Telegram app language."""
+    code = getattr(update.effective_user, "language_code", None) if update.effective_user else None
+    return tr(language_from_telegram(code), "unauthorized")
+
+
 async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles /pagalba: a fixed list of what the bot can do, without a model call."""
+    """Handles /pagalba and /help: a fixed list of what the bot can do, without a model call."""
     if update.effective_chat is None or update.effective_chat.type != "private":
         return
     if update.effective_user is None or update.message is None:
         return
 
-    if get_authorized_user(update.effective_user.id) is None:
-        await update.message.reply_text(UNAUTHORIZED_MESSAGE)
+    user = get_authorized_user(update.effective_user.id)
+    if user is None:
+        await update.message.reply_text(_unauthorized_text(update))
         return
-    await update.message.reply_text(HELP_MESSAGE)
+    await update.message.reply_text(tr(user.language, "help"))
+
+
+async def register_command_menus(bot: Any, users: list[User]) -> None:
+    """Sets the Lithuanian menu as the default and each user's menu in their own chat.
+
+    Telegram picks a language_code menu by the app's interface language, which
+    often differs from the language in users.toml, so menus are set per chat.
+    """
+    await bot.set_my_commands(bot_commands("lt"))
+    for user in users:
+        if user.language == "lt":
+            continue
+        try:
+            await bot.set_my_commands(
+                bot_commands(user.language),
+                scope=BotCommandScopeChat(chat_id=user.telegram_id),
+            )
+        except Exception:
+            # A user who never opened the bot has no chat yet; the default menu applies.
+            logger.warning("Nepavyko nustatyti komandų meniu vartotojui %d", user.telegram_id)
 
 
 async def post_init(app: Application) -> None:
-    """Registers the command menu and starts the reminder loop."""
+    """Registers the command menus and starts the reminder loop."""
     try:
-        await app.bot.set_my_commands(list(BOT_COMMANDS))
+        await register_command_menus(app.bot, load_users())
     except Exception:
         # The menu is a convenience; the bot must start even if Telegram refuses it.
         logger.exception("Nepavyko užregistruoti komandų meniu")
@@ -201,33 +231,29 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     user = get_authorized_user(update.effective_user.id)
     if user is None:
         if update.message:
-            await update.message.reply_text(UNAUTHORIZED_MESSAGE)
+            await update.message.reply_text(_unauthorized_text(update))
         return
 
     if update.message:
-        await update.message.reply_text(START_MESSAGE)
-
-
-def _usd_precise(amount: float) -> str:
-    """Formats a small USD amount with four decimals and the Lithuanian decimal comma."""
-    return f"{amount:.4f}".replace(".", ",")
+        await update.message.reply_text(tr(user.language, "start"))
 
 
 def build_costs_report(conn: Any, user: User, day: str | None = None) -> str:
     """Returns today's spending and limits; admins also see every user's spending."""
+    lang = user.language
     day = day or get_current_day()
     user_cost = get_user_daily_cost(conn, user.telegram_id, day=day)
     events = get_user_daily_events(conn, user.telegram_id, day=day)
     lines = [
-        f"Išlaidos šiandien ({day}):",
-        f"• Jūsų: {_usd_precise(user_cost)} USD iš {format_usd(MAX_USER_DAILY_COST_USD)} USD",
-        f"• Sukurta įvykių: {events} iš {MAX_USER_DAILY_EVENTS}",
+        tr(lang, "costs_title", day=day),
+        tr(lang, "costs_yours", spent=format_usd_precise(user_cost, lang),
+           limit=format_usd(MAX_USER_DAILY_COST_USD, lang)),
+        tr(lang, "costs_events", count=events, limit=MAX_USER_DAILY_EVENTS),
     ]
     if user.role == "admin":
         total = get_total_daily_cost(conn, day=day)
-        lines.append(
-            f"• Visos sistemos: {_usd_precise(total)} USD iš {format_usd(MAX_TOTAL_DAILY_COST_USD)} USD"
-        )
+        lines.append(tr(lang, "costs_system", spent=format_usd_precise(total, lang),
+                        limit=format_usd(MAX_TOTAL_DAILY_COST_USD, lang)))
         try:
             names = {u.telegram_id: u.name for u in load_users()}
         except Exception:
@@ -239,12 +265,12 @@ def build_costs_report(conn: Any, user: User, day: str | None = None) -> str:
         ).fetchall()
         for row in rows:
             name = names.get(row["user_id"], str(row["user_id"]))
-            lines.append(f"  – {name}: {_usd_precise(row['cost_usd'])} USD")
+            lines.append(f"  – {name}: {format_usd_precise(row['cost_usd'], lang)} USD")
     return "\n".join(lines)
 
 
 async def handle_costs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles /islaidos: shows today's spending against the daily limits."""
+    """Handles /islaidos and /costs: shows today's spending against the daily limits."""
     if update.effective_chat is None or update.effective_chat.type != "private":
         return
     if update.effective_user is None or update.message is None:
@@ -252,7 +278,7 @@ async def handle_costs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     user = get_authorized_user(update.effective_user.id)
     if user is None:
-        await update.message.reply_text(UNAUTHORIZED_MESSAGE)
+        await update.message.reply_text(_unauthorized_text(update))
         return
 
     conn = get_connection()
@@ -273,7 +299,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     user = get_authorized_user(update.effective_user.id)
     if user is None:
-        await update.message.reply_text(UNAUTHORIZED_MESSAGE)
+        await update.message.reply_text(_unauthorized_text(update))
         return
 
     lock = get_user_lock(user.telegram_id)
@@ -353,9 +379,13 @@ def get_default_registry(
             )
         )
         # Facts belong to one user, so these tools exist only with a bound user.
-        registry.register(make_list_facts_tool(conn=conn, user_id=user.telegram_id))
-        registry.register(make_forget_fact_tool(conn=conn, user_id=user.telegram_id))
-        for tool in make_note_tools(conn=conn, user_id=user.telegram_id):
+        registry.register(
+            make_list_facts_tool(conn=conn, user_id=user.telegram_id, language=user.language)
+        )
+        registry.register(
+            make_forget_fact_tool(conn=conn, user_id=user.telegram_id, language=user.language)
+        )
+        for tool in make_note_tools(conn=conn, user_id=user.telegram_id, language=user.language):
             registry.register(tool)
         for tool in make_reminder_tools(conn=conn, user=user):
             registry.register(tool)
@@ -388,7 +418,7 @@ def make_approval_hook(update: Update, conn: Any, user: User):
             arguments=arguments,
             chat_id=update.effective_chat.id if update.effective_chat else None,
         )
-        text, keyboard = format_approval_card(approval_id, tool_name, shown)
+        text, keyboard = format_approval_card(approval_id, tool_name, shown, user.language)
         sent = await update.message.reply_text(
             text, reply_markup=keyboard, parse_mode="Markdown"
         )
@@ -417,13 +447,14 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
 
     user = get_authorized_user(query.from_user.id) if query.from_user else None
     if user is None:
-        await query.answer(UNAUTHORIZED_MESSAGE, show_alert=True)
+        code = getattr(query.from_user, "language_code", None) if query.from_user else None
+        await query.answer(tr(language_from_telegram(code), "unauthorized"), show_alert=True)
         return
 
     conn = get_connection()
     try:
         success, message, info = process_approval_action(
-            conn, approval_id, action, query.from_user.id
+            conn, approval_id, action, query.from_user.id, language=user.language
         )
         await query.answer(message, show_alert=not success)
 
@@ -446,7 +477,7 @@ async def handle_approval_callback(update: Update, context: ContextTypes.DEFAULT
                 )
             except Exception:
                 logger.exception("Klaida vykdant patvirtintą veiksmą %d", approval_id)
-                result = ERROR_MESSAGE
+                result = tr(user.language, "error")
             for chunk in split_message(result):
                 await query.message.reply_text(chunk)
 
@@ -471,7 +502,7 @@ async def _answer(
     try:
         check_daily_cost_limit(conn, user_id)
     except LimitExceededError as e:
-        await update.message.reply_text(str(e))
+        await update.message.reply_text(e.message(user.language))
         return
 
     # Record incoming user message
@@ -494,6 +525,7 @@ async def _answer(
         timezone_name=user.timezone,
         allowed_names=allowed_names,
         facts=[f["fact"] for f in user_facts],
+        language=user.language,
     )
     llm_client: LLMClient
     if context and hasattr(context, "bot_data") and "llm_client" in context.bot_data:
@@ -507,7 +539,7 @@ async def _answer(
                 await context.bot.edit_message_text(
                     chat_id=stale["chat_id"],
                     message_id=stale["message_id"],
-                    text=APPROVAL_EXPIRED_MESSAGE,
+                    text=tr(_language_of(stale.get("user_id")), "approval_expired"),
                 )
             except Exception:
                 logger.debug("Nepavyko atnaujinti pasenusios kortelės")
@@ -584,7 +616,7 @@ async def _answer(
 
     except Exception:
         logger.exception("Klaida apdorojant vartotojo %d užklausą", user_id)
-        await update.message.reply_text(ERROR_MESSAGE)
+        await update.message.reply_text(tr(user.language, "error"))
 
 
 def create_application(
@@ -610,7 +642,7 @@ def create_application(
         app.bot_data["composio_client"] = composio_client
 
     app.add_handler(CommandHandler("start", handle_start))
-    app.add_handler(CommandHandler("islaidos", handle_costs))
+    app.add_handler(CommandHandler(["islaidos", "costs"], handle_costs))
     app.add_handler(CommandHandler(["pagalba", "help"], handle_help))
     app.add_handler(
         CallbackQueryHandler(handle_approval_callback, pattern=r"^(approve|reject):\d+$")

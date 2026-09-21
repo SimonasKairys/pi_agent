@@ -18,6 +18,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from agent.i18n import MESSAGES
+from agent.i18n import t as tr
 from agent.reminders import local_time
 from agent.tools.registry import ToolRegistry
 
@@ -116,63 +118,61 @@ def format_approval_card(
     approval_id: int,
     tool_name: str,
     arguments: dict[str, Any],
+    language: str | None = "lt",
 ) -> tuple[str, InlineKeyboardMarkup]:
-    """Builds confirmation message text and inline keyboard."""
-    action_names = {
-        "update_event": "Įvykio keitimas",
-        "delete_event": "Įvykio atšaukimas",
-        "create_event": "Naujo įvykio sukūrimas",
-        "forget_fact": "Fakto pamiršimas",
-        "create_reminder": "Priminimas kitam vartotojui",
-        "delete_reminder": "Priminimo atšaukimas",
-        "delete_note": "Užrašo trynimas",
-    }
-    action_label = action_names.get(tool_name, tool_name)
+    """Builds confirmation message text and inline keyboard in the user's language."""
+    def label(key: str) -> str:
+        return tr(language, key)
+
+    action_key = f"action_{tool_name}"
+    action_label = label(action_key) if action_key in MESSAGES["lt"] else tool_name
 
     lines = [
-        "⚠️ **Reikalingas patvirtinimas veiksmui atlikti**\n",
-        f"• **Veiksmas**: {action_label}",
+        label("card_header"),
+        f"• **{label('card_action')}**: {action_label}",
     ]
 
     if "title" in arguments:
-        lines.append(f"• **Pavadinimas**: {arguments['title']}")
+        lines.append(f"• **{label('card_title')}**: {arguments['title']}")
     elif "event_id" in arguments:
-        lines.append(f"• **Įvykio numeris**: {arguments['event_id']}")
+        lines.append(f"• **{label('card_event_no')}**: {arguments['event_id']}")
 
     if "fact" in arguments:
-        lines.append(f"• **Faktas**: {_card_text(arguments['fact'])}")
+        lines.append(f"• **{label('card_fact')}**: {_card_text(arguments['fact'])}")
     elif "fact_id" in arguments:
-        lines.append(f"• **Fakto numeris**: {arguments['fact_id']}")
+        lines.append(f"• **{label('card_fact_no')}**: {arguments['fact_id']}")
 
     if "for_name" in arguments:
-        lines.append(f"• **Kam**: {_card_text(arguments['for_name'])}")
+        lines.append(f"• **{label('card_to')}**: {_card_text(arguments['for_name'])}")
     if "when" in arguments:
-        lines.append(f"• **Kada**: {_card_time(arguments['when'])}")
+        lines.append(f"• **{label('card_when')}**: {_card_time(arguments['when'])}")
     if "text" in arguments:
-        lines.append(f"• **Tekstas**: {_card_text(arguments['text'])}")
+        lines.append(f"• **{label('card_text')}**: {_card_text(arguments['text'])}")
     elif "note_id" in arguments:
-        lines.append(f"• **Užrašo numeris**: {arguments['note_id']}")
+        lines.append(f"• **{label('card_note_no')}**: {arguments['note_id']}")
     elif "reminder_id" in arguments:
-        lines.append(f"• **Priminimo numeris**: {arguments['reminder_id']}")
+        lines.append(f"• **{label('card_reminder_no')}**: {arguments['reminder_id']}")
 
     if "start" in arguments:
         end_str = f" - {_card_time(arguments['end'])}" if "end" in arguments else ""
-        lines.append(f"• **Laikas**: {_card_time(arguments['start'])}{end_str}")
+        lines.append(f"• **{label('card_time')}**: {_card_time(arguments['start'])}{end_str}")
 
+    has_attendees = False
     if "attendees" in arguments and isinstance(arguments["attendees"], list):
         count = len(arguments["attendees"])
-        names = ", ".join(arguments["attendees"]) if count > 0 else "nėra"
-        lines.append(f"• **Dalyvių skaičius**: {count} ({names})")
+        names = ", ".join(arguments["attendees"]) if count > 0 else label("card_attendees_none")
+        lines.append(f"• **{label('card_attendees')}**: {count} ({names})")
+        has_attendees = True
 
-    if "attendee_count" in arguments and not any("Dalyvi" in ln for ln in lines):
-        lines.append(f"• Dalyvių: {arguments['attendee_count']}")
-    lines.append(f"\n_Patvirtinimas galioja {APPROVAL_EXPIRY_MINUTES} min._")
+    if "attendee_count" in arguments and not has_attendees:
+        lines.append(f"• {label('card_attendee_count')}: {arguments['attendee_count']}")
+    lines.append("\n_" + tr(language, "card_valid_for", minutes=APPROVAL_EXPIRY_MINUTES) + "_")
     text = "\n".join(lines)
 
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("Tvirtinti", callback_data=f"approve:{approval_id}"),
-            InlineKeyboardButton("Atmesti", callback_data=f"reject:{approval_id}"),
+            InlineKeyboardButton(label("btn_approve"), callback_data=f"approve:{approval_id}"),
+            InlineKeyboardButton(label("btn_reject"), callback_data=f"reject:{approval_id}"),
         ]
     ])
 
@@ -184,6 +184,7 @@ def process_approval_action(
     approval_id: int,
     action: str,
     clicking_user_id: int,
+    language: str | None = "lt",
 ) -> tuple[bool, str, dict[str, Any] | None]:
     """Processes approval button click atomically.
 
@@ -198,7 +199,7 @@ def process_approval_action(
     row = cursor.fetchone()
 
     if row is None:
-        return False, "Patvirtinimo užklausa nerasta.", None
+        return False, tr(language, "approval_not_found"), None
 
     # Strict sender verification
     if row["user_id"] != clicking_user_id:
@@ -208,7 +209,7 @@ def process_approval_action(
             row["user_id"],
             approval_id,
         )
-        return False, "Neturite teisės tvirtinti šio veiksmo.", None
+        return False, tr(language, "approval_not_allowed"), None
 
     # Check expiration
     exp_str = row["expires_at"]
@@ -227,17 +228,17 @@ def process_approval_action(
                 (approval_id,),
             )
             conn.commit()
-        return False, "Patvirtinimo galiojimo laikas pasibaigęs.", None
+        return False, tr(language, "approval_timed_out"), None
 
     # Check status
     if row["status"] != "pending":
-        status_labels = {
-            "approved": "jau patvirtintas",
-            "rejected": "jau atmestas",
-            "expired": "pasenęs",
+        status_keys = {
+            "approved": "approval_already_approved",
+            "rejected": "approval_already_rejected",
+            "expired": "approval_already_expired",
         }
-        lbl = status_labels.get(row["status"], row["status"])
-        return False, f"Veiksmas {lbl}.", None
+        key = status_keys.get(row["status"], "approval_already_processed")
+        return False, tr(language, key), None
 
     new_status = "approved" if action == "approve" else "rejected"
 
@@ -249,10 +250,10 @@ def process_approval_action(
     conn.commit()
 
     if cur.rowcount != 1:
-        return False, "Veiksmas jau buvo apdorotas.", None
+        return False, tr(language, "approval_already_processed"), None
 
     if new_status == "rejected":
-        return True, "Veiksmas atmestas.", None
+        return True, tr(language, "approval_rejected"), None
 
     try:
         arguments = json.loads(row["arguments"])
@@ -267,7 +268,7 @@ def process_approval_action(
         "chat_id": row["chat_id"],
         "message_id": row["message_id"],
     }
-    return True, "Veiksmas patvirtintas.", approval_info
+    return True, tr(language, "approval_approved"), approval_info
 
 
 async def execute_approved_action(

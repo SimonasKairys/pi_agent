@@ -14,6 +14,7 @@ import re
 import sqlite3
 from functools import partial
 
+from agent.i18n import t
 from agent.memory import get_current_timestamp
 from agent.tools.registry import Tool
 
@@ -27,43 +28,43 @@ def _format_rows(rows: list[sqlite3.Row]) -> str:
     return "\n".join(f"{row['id']}. [{row['created_at'][:10]}] {row['text']}" for row in rows)
 
 
-def add_note(conn: sqlite3.Connection, user_id: int, text: str) -> str:
+def add_note(conn: sqlite3.Connection, user_id: int, text: str, language: str = "lt") -> str:
     """Saves a note for the user."""
     clean = str(text).strip()
     if not clean:
-        return "Klaida: užrašas tuščias."
+        return t(language, "note_empty")
     if len(clean) > MAX_NOTE_LENGTH:
-        return f"Klaida: užrašas per ilgas (daugiausia {MAX_NOTE_LENGTH} simbolių)."
+        return t(language, "note_too_long", limit=MAX_NOTE_LENGTH)
     count = conn.execute(
         "SELECT COUNT(*) AS c FROM notes WHERE user_id = ?", (user_id,)
     ).fetchone()["c"]
     if count >= MAX_USER_NOTES:
-        return f"Klaida: pasiekta užrašų riba ({MAX_USER_NOTES}). Pirmiausia ištrink senus užrašus."
+        return t(language, "note_limit", limit=MAX_USER_NOTES)
     cursor = conn.execute(
         "INSERT INTO notes (user_id, text, created_at) VALUES (?, ?, ?)",
         (user_id, clean, get_current_timestamp()),
     )
     conn.commit()
-    return f"Užrašas {cursor.lastrowid} išsaugotas."
+    return t(language, "note_saved", id=cursor.lastrowid)
 
 
-def list_notes(conn: sqlite3.Connection, user_id: int) -> str:
+def list_notes(conn: sqlite3.Connection, user_id: int, language: str = "lt") -> str:
     """Returns the user's most recent notes with their numbers."""
     rows = conn.execute(
         "SELECT id, text, created_at FROM notes WHERE user_id = ? ORDER BY id DESC LIMIT ?",
         (user_id, LIST_NOTES_LIMIT),
     ).fetchall()
     if not rows:
-        return "Užrašų nėra."
+        return t(language, "notes_none")
     return _format_rows(rows)
 
 
-def search_notes(conn: sqlite3.Connection, user_id: int, query: str) -> str:
+def search_notes(conn: sqlite3.Connection, user_id: int, query: str, language: str = "lt") -> str:
     """Finds the user's notes that contain words starting like the query words."""
     # Words under 3 letters ("ir", "ką") would match almost every note.
     words = [w for w in re.findall(r"\w+", str(query)) if len(w) >= 3]
     if not words:
-        return list_notes(conn, user_id)
+        return list_notes(conn, user_id, language)
     # Quoting each word keeps FTS5 syntax out of the model's query; the prefix
     # match lets "straipsnis" find "straipsnį" and "straipsniui".
     match = " OR ".join(f'"{word[:max(3, len(word) - 2)]}"*' for word in words)
@@ -79,19 +80,19 @@ def search_notes(conn: sqlite3.Connection, user_id: int, query: str) -> str:
         (user_id, match, SEARCH_NOTES_LIMIT),
     ).fetchall()
     if not rows:
-        return "Tinkamų užrašų nerasta."
+        return t(language, "notes_no_match")
     return _format_rows(rows)
 
 
-def delete_note(conn: sqlite3.Connection, user_id: int, note_id: int) -> str:
+def delete_note(conn: sqlite3.Connection, user_id: int, note_id: int, language: str = "lt") -> str:
     """Deletes one of the user's notes; another user's note is never touched."""
     cursor = conn.execute(
         "DELETE FROM notes WHERE id = ? AND user_id = ?", (int(note_id), user_id)
     )
     conn.commit()
     if cursor.rowcount:
-        return f"Užrašas {note_id} ištrintas."
-    return f"Užrašo {note_id} nerasta."
+        return t(language, "note_deleted", id=note_id)
+    return t(language, "note_not_found", id=note_id)
 
 
 ADD_NOTE_TOOL = Tool(
@@ -151,7 +152,7 @@ DELETE_NOTE_TOOL = Tool(
 )
 
 
-def make_note_tools(conn: sqlite3.Connection, user_id: int) -> list[Tool]:
+def make_note_tools(conn: sqlite3.Connection, user_id: int, language: str = "lt") -> list[Tool]:
     """Creates user-bound note tool instances for registration."""
     return [
         Tool(
@@ -159,7 +160,7 @@ def make_note_tools(conn: sqlite3.Connection, user_id: int) -> list[Tool]:
             description=tool.description,
             parameters=tool.parameters,
             risk=tool.risk,
-            func=partial(tool.func, conn=conn, user_id=user_id),
+            func=partial(tool.func, conn=conn, user_id=user_id, language=language),
         )
         for tool in (ADD_NOTE_TOOL, SEARCH_NOTES_TOOL, LIST_NOTES_TOOL, DELETE_NOTE_TOOL)
     ]

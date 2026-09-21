@@ -4,7 +4,7 @@
 
 A personal Telegram assistant that runs on a Raspberry Pi. It answers questions, searches the
 web, and manages a shared Google Calendar for a small, allowlisted group of people. The assistant
-talks to users in Lithuanian.
+talks to each user in Lithuanian (the default) or English, set per user in `users.toml`.
 
 ## Features
 
@@ -93,6 +93,7 @@ name = "Simonas"
 email = "you@example.com"
 timezone = "Europe/Vilnius"
 role = "admin"
+language = "en"    # optional: "lt" (default) or "en"
 ```
 
 Start the bot. It reads `.env` from the working directory, and `.env.example` already points the

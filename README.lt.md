@@ -3,8 +3,8 @@
 [English](README.md)
 
 Asmeninis Telegram pagalbininkas, veikiantis Raspberry Pi. Jis atsako į klausimus, ieško
-internete ir tvarko bendrą Google kalendorių nedidelei leidžiamų žmonių grupei. Su vartotojais
-pagalbininkas kalba lietuviškai.
+internete ir tvarko bendrą Google kalendorių nedidelei leidžiamų žmonių grupei. Su kiekvienu
+vartotoju pagalbininkas kalba lietuviškai (numatytoji kalba) arba angliškai, pagal `users.toml`.
 
 ## Galimybės
 
@@ -94,6 +94,7 @@ name = "Simonas"
 email = "jusu@example.com"
 timezone = "Europe/Vilnius"
 role = "admin"
+language = "lt"    # nebūtina: "lt" (numatytoji) arba "en"
 ```
 
 Paleiskite botą. Jis skaito `.env` iš darbinio katalogo, o `.env.example` duomenų kelius jau

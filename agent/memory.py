@@ -34,11 +34,13 @@ Taisyklės:
    - 1-6: laikina ar menkavertė detalė
    - 7-8: naudingas ilgalaikis faktas (pvz. gyvena Vilniuje, geria kavą be cukraus)
    - 9-10: esminis asmeninis faktas ar svarbi taisyklė (pvz. alergiškas riešutams, dirba programuotoju)
-5. Jei vartotojas aiškiai prašo ką nors prisiminti (pvz. "prisimink", "įsimink", "atsimink"),
-   išskirk tą faktą su svarba 9.
+5. Jei vartotojas aiškiai prašo ką nors prisiminti bet kuria kalba (pvz. "prisimink", "įsimink",
+   "atsimink", "remember"), išskirk tą faktą su svarba 9.
 6. Neišskirk prašymų ką nors pamiršti ir faktų apie pačią atmintį (pvz. "vartotojas paprašė pamiršti").
-   Neišskirk ir priminimų bei užrašų (pvz. "primink rytoj...", "užsirašyk idėją...").
-7. Atsakymą pateik griežtai kaip JSON masyvą:
+   Neišskirk ir priminimų bei užrašų (pvz. "primink rytoj...", "užsirašyk idėją...",
+   "remind me...", "note...").
+7. Faktą rašyk ta kalba, kuria rašo vartotojas.
+8. Atsakymą pateik griežtai kaip JSON masyvą:
    [{"fact": "fakto tekstas", "importance": 8}]
    Jei tinkamų faktų nėra, grąžink tuščią masyvą: []
 """

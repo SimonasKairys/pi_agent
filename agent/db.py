@@ -29,8 +29,23 @@ RESET_TIMEZONE = "Europe/Vilnius"
 
 
 class LimitExceededError(Exception):
-    """Raised when daily cost or action limits are exceeded."""
-    pass
+    """Raised when daily cost or action limits are exceeded.
+
+    str(error) is the Lithuanian message; message(language) gives it in the
+    user's language.
+    """
+
+    def __init__(self, kind: str, limit: float) -> None:
+        self.kind = kind
+        self.limit = limit
+        super().__init__(self.message("lt"))
+
+    def message(self, language: str | None) -> str:
+        if self.kind == "user":
+            return user_limit_exceeded_message(self.limit, language)
+        if self.kind == "system":
+            return system_limit_exceeded_message(self.limit, language)
+        return user_event_limit_exceeded_message(int(self.limit), language)
 
 
 
@@ -339,11 +354,11 @@ def check_daily_cost_limit(
 
     user_cost = get_user_daily_cost(conn, user_id, day=day)
     if user_cost >= MAX_USER_DAILY_COST_USD:
-        raise LimitExceededError(user_limit_exceeded_message(MAX_USER_DAILY_COST_USD))
+        raise LimitExceededError("user", MAX_USER_DAILY_COST_USD)
 
     total_cost = get_total_daily_cost(conn, day=day)
     if total_cost >= MAX_TOTAL_DAILY_COST_USD:
-        raise LimitExceededError(system_limit_exceeded_message(MAX_TOTAL_DAILY_COST_USD))
+        raise LimitExceededError("system", MAX_TOTAL_DAILY_COST_USD)
 
 
 def get_user_daily_events(
@@ -377,6 +392,6 @@ def check_daily_event_limit(
 
     events_count = get_user_daily_events(conn, user_id, day=day)
     if events_count >= MAX_USER_DAILY_EVENTS:
-        raise LimitExceededError(user_event_limit_exceeded_message(MAX_USER_DAILY_EVENTS))
+        raise LimitExceededError("events", MAX_USER_DAILY_EVENTS)
 
 

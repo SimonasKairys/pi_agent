@@ -16,6 +16,7 @@ from functools import partial
 from typing import Callable
 
 from agent.config import User, load_users
+from agent.i18n import t
 from agent.reminders import local_time
 from agent.tools.registry import Tool
 
@@ -28,6 +29,7 @@ def _resolve_recipient(
     user_id: int,
     for_name: str | None,
     users_loader: Callable[[], list[User]],
+    language: str = "lt",
 ) -> tuple[User | None, str | None]:
     """Returns the recipient, or an error message. Guests cannot get reminders."""
     users = users_loader()
@@ -38,7 +40,7 @@ def _resolve_recipient(
         if u.name.casefold() == wanted:
             return u, None
     names = ", ".join(u.name for u in users)
-    return None, f"Klaida: vartotojo „{for_name}“ nėra. Priminti galima tik boto vartotojams: {names}."
+    return None, t(language, "reminder_unknown_user", name=for_name, names=names)
 
 
 def create_reminder(
@@ -50,30 +52,31 @@ def create_reminder(
     for_name: str | None = None,
     now: datetime | None = None,
     users_loader: Callable[[], list[User]] = load_users,
+    language: str = "lt",
 ) -> str:
     """Schedules a one-time reminder at a local time in the creator's time zone."""
     clean = str(text).strip()
     if not clean:
-        return "Klaida: priminimo tekstas tuščias."
+        return t(language, "reminder_empty")
     if len(clean) > MAX_REMINDER_LENGTH:
-        return f"Klaida: priminimas per ilgas (daugiausia {MAX_REMINDER_LENGTH} simbolių)."
+        return t(language, "reminder_too_long", limit=MAX_REMINDER_LENGTH)
 
     try:
         tz = zoneinfo.ZoneInfo(timezone_str)
         due = datetime.fromisoformat(str(when).strip())
     except (ValueError, zoneinfo.ZoneInfoNotFoundError):
-        return "Klaida: laiką nurodyk taip: 2026-09-22T09:00."
+        return t(language, "reminder_bad_time")
     if due.tzinfo is None:
         due = due.replace(tzinfo=tz)
     due_utc = due.astimezone(timezone.utc).replace(second=0, microsecond=0)
 
     now = now or datetime.now(timezone.utc)
     if due_utc < now - timedelta(minutes=1):
-        return "Klaida: šis laikas jau praėjo."
+        return t(language, "reminder_past")
     if due_utc > now + timedelta(days=MAX_REMINDER_DAYS_AHEAD):
-        return f"Klaida: priminti galima ne vėliau kaip po {MAX_REMINDER_DAYS_AHEAD} dienų."
+        return t(language, "reminder_too_far", days=MAX_REMINDER_DAYS_AHEAD)
 
-    recipient, error = _resolve_recipient(user_id, for_name, users_loader)
+    recipient, error = _resolve_recipient(user_id, for_name, users_loader, language)
     if error:
         return error
     recipient_id = recipient.telegram_id if recipient else user_id
@@ -83,7 +86,7 @@ def create_reminder(
         (user_id,),
     ).fetchone()["c"]
     if pending >= MAX_PENDING_REMINDERS:
-        return f"Klaida: pasiekta laukiančių priminimų riba ({MAX_PENDING_REMINDERS})."
+        return t(language, "reminder_limit", limit=MAX_PENDING_REMINDERS)
 
     cursor = conn.execute(
         "INSERT INTO reminders (user_id, created_by, text, due_at, created_at) VALUES (?, ?, ?, ?, ?)",
@@ -92,8 +95,9 @@ def create_reminder(
     conn.commit()
     shown = local_time(due_utc.isoformat(), timezone_str)
     if recipient_id != user_id:
-        return f"Priminimas {cursor.lastrowid} vartotojui {recipient.name} sukurtas: {shown} – {clean}"
-    return f"Priminimas {cursor.lastrowid} sukurtas: {shown} – {clean}"
+        return t(language, "reminder_created_for", id=cursor.lastrowid, name=recipient.name,
+                 time=shown, text=clean)
+    return t(language, "reminder_created", id=cursor.lastrowid, time=shown, text=clean)
 
 
 def list_reminders(
@@ -101,6 +105,7 @@ def list_reminders(
     user_id: int,
     timezone_str: str,
     users_loader: Callable[[], list[User]] = load_users,
+    language: str = "lt",
 ) -> str:
     """Returns pending reminders the user created or will receive."""
     rows = conn.execute(
@@ -112,7 +117,7 @@ def list_reminders(
         (user_id, user_id),
     ).fetchall()
     if not rows:
-        return "Laukiančių priminimų nėra."
+        return t(language, "reminders_none")
     try:
         names = {u.telegram_id: u.name for u in users_loader()}
     except Exception:
@@ -121,14 +126,16 @@ def list_reminders(
     for row in rows:
         line = f"{row['id']}. {local_time(row['due_at'], timezone_str)} – {row['text']}"
         if row["user_id"] != user_id:
-            line += f" (vartotojui {names.get(row['user_id'], row['user_id'])})"
+            line += " " + t(language, "reminder_to_user", name=names.get(row["user_id"], row["user_id"]))
         elif row["created_by"] != user_id:
-            line += f" (nuo {names.get(row['created_by'], row['created_by'])})"
+            line += " " + t(language, "reminder_from_user", name=names.get(row["created_by"], row["created_by"]))
         lines.append(line)
     return "\n".join(lines)
 
 
-def delete_reminder(conn: sqlite3.Connection, user_id: int, reminder_id: int) -> str:
+def delete_reminder(
+    conn: sqlite3.Connection, user_id: int, reminder_id: int, language: str = "lt"
+) -> str:
     """Cancels a pending reminder that the user created or would receive."""
     cursor = conn.execute(
         """
@@ -139,8 +146,8 @@ def delete_reminder(conn: sqlite3.Connection, user_id: int, reminder_id: int) ->
     )
     conn.commit()
     if cursor.rowcount:
-        return f"Priminimas {reminder_id} atšauktas."
-    return f"Priminimo {reminder_id} nerasta."
+        return t(language, "reminder_cancelled", id=reminder_id)
+    return t(language, "reminder_not_found", id=reminder_id)
 
 
 CREATE_REMINDER_TOOL = Tool(
@@ -199,12 +206,16 @@ def make_reminder_tools(conn: sqlite3.Connection, user: User) -> list[Tool]:
     """Creates user-bound reminder tool instances for registration."""
     bound = {
         CREATE_REMINDER_TOOL.name: partial(
-            create_reminder, conn=conn, user_id=user.telegram_id, timezone_str=user.timezone
+            create_reminder, conn=conn, user_id=user.telegram_id, timezone_str=user.timezone,
+            language=user.language,
         ),
         LIST_REMINDERS_TOOL.name: partial(
-            list_reminders, conn=conn, user_id=user.telegram_id, timezone_str=user.timezone
+            list_reminders, conn=conn, user_id=user.telegram_id, timezone_str=user.timezone,
+            language=user.language,
         ),
-        DELETE_REMINDER_TOOL.name: partial(delete_reminder, conn=conn, user_id=user.telegram_id),
+        DELETE_REMINDER_TOOL.name: partial(
+            delete_reminder, conn=conn, user_id=user.telegram_id, language=user.language
+        ),
     }
     return [
         Tool(

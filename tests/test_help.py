@@ -46,6 +46,7 @@ def test_help_refuses_unknown_user(monkeypatch):
 def test_post_init_registers_menu_and_starts_reminders(monkeypatch):
     started = AsyncMock()
     monkeypatch.setattr(telegram_ui, "start_reminder_loop", started)
+    monkeypatch.setattr(telegram_ui, "load_users", lambda: [SIMONAS])
     app = SimpleNamespace(bot=SimpleNamespace(set_my_commands=AsyncMock()), bot_data={})
 
     asyncio.run(telegram_ui.post_init(app))

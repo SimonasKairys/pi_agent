@@ -1,4 +1,5 @@
-"""Lithuanian prompts and user-facing messages for pi_agent.
+"""Prompts for pi_agent. The prompts are Lithuanian; the system prompt tells the
+model which language to answer in. User-facing texts live in agent/i18n.py.
 """
 
 from __future__ import annotations
@@ -7,7 +8,10 @@ import zoneinfo
 from datetime import datetime
 from typing import Any
 
-SYSTEM_PROMPT_TEMPLATE = """Tu esi asmeninis pagalbininkas, pasiekiamas per Telegram. Atsakinėji lietuvių kalba,
+from agent.i18n import LANGUAGE_NAMES_LT, MESSAGES, format_usd, normalize_language, t
+
+SYSTEM_PROMPT_TEMPLATE = """Visada atsakyk {kalba} kalba.
+Tu esi asmeninis pagalbininkas, pasiekiamas per Telegram. Atsakinėji {kalba} kalba,
 trumpai ir dalykiškai.
 
 Dabar yra {data_laikas} ({laiko_juosta}). Kalbiesi su vartotoju {vardas}.
@@ -32,60 +36,36 @@ Atmintis, priminimai ir užrašai:
 - „Užsirašyk“, idėja ar mintis: išsaugok su add_note. Užrašų ieškok su search_notes.
 
 Jei ko nors nežinai arba trūksta duomenų, pasakyk tai tiesiai. Nespėliok laiko,
-dalyvių ar faktų."""
+dalyvių ar faktų.
 
-# User-facing Lithuanian messages
-START_MESSAGE = (
-    "Sveiki! Aš esu jūsų asmeninis pagalbininkas. Kuo galiu padėti?\n"
-    "Parašykite /pagalba, ir parodysiu, ką moku."
-)
-HELP_MESSAGE = """Ką moku (rašykite laisvai, kaip žmogui):
+Kalba: vartotojui rašyk tik {kalba} kalba, net jei įrankių rezultatai, faktai ar užrašai
+parašyti kita kalba."""
 
-📅 Kalendorius
-• „Kas mano kalendoriuje šią savaitę?“
-• „Sukurk susitikimą su Rūta rytoj 15 val.“
-• „Perkelk susitikimą į 16 val.“, „Atšauk susitikimą“
-
-⏰ Priminimai
-• „Primink rytoj 9 val. paskambinti Jokūbui“
-• „Primink Rūtai penktadienį 18 val. atnešti raktus“
-• „Kokius turiu priminimus?“, „Atšauk priminimą 2“
-
-📝 Užrašai
-• „Užsirašyk: idėja straipsniui apie šifravimą“
-• „Ką buvau užsirašęs apie straipsnius?“
-• „Parodyk mano užrašus“, „Ištrink užrašą 3“
-
-🧠 Atmintis
-• „Prisimink, kad geriu kavą be cukraus“
-• „Ką apie mane žinai?“, „Pamiršk, kad …“
-
-🔎 Paieška internete
-• „Kokia rytoj orų prognozė Vilniuje?“
-
-Trynimas, keitimas ir priminimai kitiems patvirtinami mygtuku.
-
-Komandos:
-/pagalba – šis sąrašas
-/islaidos – šiandienos išlaidos ir dienos ribos"""
-# Shown in Telegram's command menu (the "/" button)
-BOT_COMMANDS = (
-    ("pagalba", "Ką moku ir kaip manęs paprašyti"),
-    ("islaidos", "Šiandienos išlaidos ir dienos ribos"),
-)
-UNAUTHORIZED_MESSAGE = "Atsiprašome, neturite prieigos prie šio boto."
-ERROR_MESSAGE = "Atsiprašome, įvyko klaida apdorojant jūsų užklausą. Pabandykite vėliau."
-# Templates: the limit itself lives in db.py, the wording lives here.
-USER_LIMIT_EXCEEDED_MESSAGE = "Viršyta jūsų dienos naudojimo riba ({riba} USD). Bandykite rytoj."
-SYSTEM_LIMIT_EXCEEDED_MESSAGE = "Viršyta bendra sistemos dienos naudojimo riba ({riba} USD). Bandykite rytoj."
-EVENT_LIMIT_EXCEEDED_MESSAGE = "Viršyta jūsų dienos įvykių kūrimo riba ({riba}). Bandykite rytoj."
+# User-facing texts live in agent/i18n.py; these Lithuanian names stay for older callers.
+START_MESSAGE = t("lt", "start")
+HELP_MESSAGE = t("lt", "help")
+UNAUTHORIZED_MESSAGE = t("lt", "unauthorized")
+ERROR_MESSAGE = t("lt", "error")
+BUSY_MESSAGE = t("lt", "busy")
+APPROVAL_EXPIRED_MESSAGE = t("lt", "approval_expired")
+USER_LIMIT_EXCEEDED_MESSAGE = MESSAGES["lt"]["user_limit"]
+SYSTEM_LIMIT_EXCEEDED_MESSAGE = MESSAGES["lt"]["system_limit"]
+EVENT_LIMIT_EXCEEDED_MESSAGE = MESSAGES["lt"]["event_limit"]
+# Goes to the model as a tool result, so it stays Lithuanian.
 APPROVAL_PENDING_MESSAGE = (
     "Veiksmas laukia patvirtinimo. Paspauskite mygtuką žinutėje aukščiau."
 )
-APPROVAL_EXPIRED_MESSAGE = (
-    "⌛ Patvirtinimo laikas baigėsi, veiksmas atmestas."
-)
-BUSY_MESSAGE = "Jūsų ankstesnė užklausa dar vykdoma. Prašome palaukti."
+
+
+def bot_commands(language: str | None) -> list[tuple[str, str]]:
+    """Returns the Telegram command menu entries in the given language."""
+    return [
+        (t(language, "cmd_help"), t(language, "cmd_help_desc")),
+        (t(language, "cmd_costs"), t(language, "cmd_costs_desc")),
+    ]
+
+
+BOT_COMMANDS = tuple(bot_commands("lt"))
 
 
 WEEKDAYS_LT = (
@@ -99,24 +79,19 @@ WEEKDAYS_LT = (
 )
 
 
-def format_usd(amount: float) -> str:
-    """Formats a USD amount with the Lithuanian decimal comma."""
-    return f"{amount:.2f}".replace(".", ",")
-
-
-def user_limit_exceeded_message(limit_usd: float) -> str:
+def user_limit_exceeded_message(limit_usd: float, language: str | None = "lt") -> str:
     """Returns the per-user daily limit message for the given limit."""
-    return USER_LIMIT_EXCEEDED_MESSAGE.format(riba=format_usd(limit_usd))
+    return t(language, "user_limit", limit=format_usd(limit_usd, language))
 
 
-def system_limit_exceeded_message(limit_usd: float) -> str:
+def system_limit_exceeded_message(limit_usd: float, language: str | None = "lt") -> str:
     """Returns the system-wide daily limit message for the given limit."""
-    return SYSTEM_LIMIT_EXCEEDED_MESSAGE.format(riba=format_usd(limit_usd))
+    return t(language, "system_limit", limit=format_usd(limit_usd, language))
 
 
-def user_event_limit_exceeded_message(limit: int) -> str:
+def user_event_limit_exceeded_message(limit: int, language: str | None = "lt") -> str:
     """Returns the per-user daily event creation limit message for the given limit."""
-    return EVENT_LIMIT_EXCEEDED_MESSAGE.format(riba=limit)
+    return t(language, "event_limit", limit=limit)
 
 
 def build_system_prompt(
@@ -125,8 +100,10 @@ def build_system_prompt(
     allowed_names: list[str] | None = None,
     current_time_str: str | None = None,
     facts: list[str] | list[Any] | None = None,
+    language: str | None = "lt",
 ) -> str:
-    """Builds the system prompt with time, user name, allowed participants, and facts."""
+    """Builds the system prompt with time, user name, allowed participants, facts, and
+    the language the model must answer in."""
     if current_time_str is None:
         try:
             tz = zoneinfo.ZoneInfo(timezone_name)
@@ -160,6 +137,7 @@ def build_system_prompt(
         vardas=name,
         vardu_sarasas=allowed_str,
         faktu_blokas=faktu_blokas,
+        kalba=LANGUAGE_NAMES_LT[normalize_language(language)],
     )
 
 

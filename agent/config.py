@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DEFAULT_USERS_FILE = "/etc/piagent/users.toml"
+# Languages the bot's fixed texts are translated into; "lt" is the default.
+SUPPORTED_LANGUAGES = ("lt", "en")
 DEFAULT_DB_PATH = "/home/piagent/data/agent.db"
 DEFAULT_LOG_DIR = "/home/piagent/logs"
 
@@ -31,6 +33,7 @@ class User:
     email: str
     timezone: str
     role: str = "member"
+    language: str = "lt"
 
 
 @dataclass(frozen=True)
@@ -124,12 +127,20 @@ def load_users(file_path: str | Path | None = None) -> list[User]:
         if not isinstance(role, str):
             role = "member"
 
+        language = entry.get("language", "lt")
+        if not isinstance(language, str) or language.strip().lower() not in SUPPORTED_LANGUAGES:
+            raise ConfigError(
+                f"User entry '{name}' has unsupported language {language!r} "
+                f"(supported: {', '.join(SUPPORTED_LANGUAGES)})"
+            )
+
         users.append(User(
             telegram_id=telegram_id,
             name=name,
             email=email.strip(),
             timezone=tz_str,
-            role=role.strip()
+            role=role.strip(),
+            language=language.strip().lower(),
         ))
         seen_ids.add(telegram_id)
         seen_names.add(name)

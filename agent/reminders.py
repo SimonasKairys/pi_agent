@@ -19,6 +19,7 @@ from telegram.error import Forbidden
 
 from agent.config import User, load_users
 from agent.db import get_connection
+from agent.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -37,18 +38,20 @@ def local_time(value_utc: str, timezone_name: str) -> str:
 
 
 def _reminder_message(row: sqlite3.Row, users: dict[int, User], now: datetime) -> str:
-    """Builds the reminder text; a reminder from someone else names the sender."""
+    """Builds the reminder text in the recipient's language; a reminder from
+    someone else names the sender. The reminder itself stays as it was written."""
     recipient = users.get(row["user_id"])
     creator = users.get(row["created_by"])
+    language = recipient.language if recipient else "lt"
     if row["created_by"] != row["user_id"]:
         sender = creator.name if creator else str(row["created_by"])
-        text = f"⏰ Priminimas nuo {sender}: {row['text']}"
+        text = t(language, "reminder_from", sender=sender, text=row["text"])
     else:
-        text = f"⏰ Priminimas: {row['text']}"
+        text = t(language, "reminder", text=row["text"])
     due = datetime.fromisoformat(row["due_at"])
     if now - due > LATE_AFTER:
         tz_name = recipient.timezone if recipient else "Europe/Vilnius"
-        text += f"\n(Vėluoja: turėjo būti {local_time(row['due_at'], tz_name)})"
+        text += "\n" + t(language, "reminder_late", time=local_time(row["due_at"], tz_name))
     return text
 
 
@@ -95,13 +98,16 @@ async def deliver_due_reminders(
             conn.commit()
             if row["created_by"] != row["user_id"]:
                 recipient = users.get(row["user_id"])
+                creator = users.get(row["created_by"])
                 name = recipient.name if recipient else str(row["user_id"])
                 try:
                     await bot.send_message(
                         chat_id=row["created_by"],
-                        text=(
-                            f"Priminimo {name} išsiųsti nepavyko: šis vartotojas dar nėra "
-                            f"pradėjęs pokalbio su botu (/start). Priminimas: {row['text']}"
+                        text=t(
+                            creator.language if creator else "lt",
+                            "reminder_failed",
+                            name=name,
+                            text=row["text"],
                         ),
                     )
                 except Exception:

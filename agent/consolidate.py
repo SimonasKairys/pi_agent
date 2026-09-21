@@ -32,9 +32,10 @@ Taisyklės:
 1. Ieškok pasikartojančių įpročių, prioritetų, taisyklių, pageidavimų ar apibendrinimų, kurie padės asistentui geriau pažinti vartotoją ateityje.
 2. Nekartok jau žinomų faktų pažodžiui.
 3. Kiekvienai įžvalgai priskirk svarbą nuo 7 iki 10 (7 - naudingas pastebėjimas, 10 - esminė taisyklė ar įžvalga).
-4. Jei vartotojas pokalbyje paprašė ką nors pamiršti, nekurk įžvalgų iš to, ką jis paprašė pamiršti,
+4. Įžvalgas rašyk ta kalba, kuria vartotojas rašo pokalbiuose.
+5. Jei vartotojas pokalbyje paprašė ką nors pamiršti, nekurk įžvalgų iš to, ką jis paprašė pamiršti,
    ir neišskirk paties prašymo pamiršti.
-5. Atsakymą pateik griežtai kaip JSON masyvą:
+6. Atsakymą pateik griežtai kaip JSON masyvą:
    [{"fact": "įžvalgos tekstas", "importance": 8}]
    Jei naujų prasmingų įžvalgų suformuluoti negalima, grąžink tuščią masyvą: []
 """
