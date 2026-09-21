@@ -13,10 +13,11 @@ pagalbininkas kalba lietuviškai.
   botu nesinaudoja.
 - **Paieška internete**: naudoja [Tavily](https://tavily.com) su ribotu rezultatų skaičiumi ir
   ištraukų ilgiu.
-- **Patvirtinimai**: `update_event` ir `delete_event` visada reikalauja patvirtinimo mygtuko
+- **Patvirtinimai**: `update_event`, `delete_event` ir `forget_fact` visada reikalauja patvirtinimo mygtuko
   Telegram. Bet koks įrašymas po paieškos internete taip pat reikalauja patvirtinimo.
 - **Atmintis**: paskutines žinutes laiko pažodžiui, senesnę istoriją sutraukia, išsaugo svarbius
-  faktus apie kiekvieną vartotoją ir kas naktį juos konsoliduoja.
+  faktus apie kiekvieną vartotoją ir kas naktį juos konsoliduoja. Vartotojas gali paklausti, ką
+  botas apie jį atsimena, ir paprašyti pamiršti faktą (`list_facts`, `forget_fact`).
 - **Išlaidų ribos**: skaičiuoja žetonus kiekvienam vartotojui ir taiko dienos ribas vartotojui
   bei visai sistemai.
 - **Apsauga nuo raginimo injekcijų**: įrankių rezultatai, kalendoriaus įvykių tekstas, paieškos
@@ -32,7 +33,7 @@ pagalbininkas kalba lietuviškai.
 | `agent/telegram_ui.py` | Telegram apdorojimas, patvirtinimo mygtukai ir žinučių skaidymas |
 | `agent/loop.py` | Įrankius kviečiantis agento ciklas su iteracijų, laiko, žetonų ir kartojimų ribomis |
 | `agent/llm.py` | [OpenRouter](https://openrouter.ai) klientas; numatytasis modelis `deepseek/deepseek-v4.1-flash` |
-| `agent/tools/` | `search_web`, `list_events`, `create_event`, `update_event` ir `delete_event` |
+| `agent/tools/` | `search_web`, `list_events`, `create_event`, `update_event`, `delete_event`, `list_facts` ir `forget_fact` |
 | `agent/approvals.py` | Taisyklės, kuriems įrankių kvietimams reikia patvirtinimo |
 | `agent/context.py`, `agent/memory.py` | Konteksto valdymas, santraukos ir faktai apie vartotojus |
 | `agent/consolidate.py` | Naktinė atminties konsolidacija (paleidžia systemd laikmatis) |

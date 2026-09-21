@@ -32,7 +32,10 @@ Taisyklės:
    - 1-6: laikina ar menkavertė detalė
    - 7-8: naudingas ilgalaikis faktas (pvz. gyvena Vilniuje, geria kavą be cukraus)
    - 9-10: esminis asmeninis faktas ar svarbi taisyklė (pvz. alergiškas riešutams, dirba programuotoju)
-4. Atsakymą pateik griežtai kaip JSON masyvą:
+4. Jei vartotojas aiškiai prašo ką nors prisiminti (pvz. "prisimink", "įsimink", "atsimink"),
+   išskirk tą faktą su svarba 9.
+5. Neišskirk prašymų ką nors pamiršti ir faktų apie pačią atmintį (pvz. "vartotojas paprašė pamiršti").
+6. Atsakymą pateik griežtai kaip JSON masyvą:
    [{"fact": "fakto tekstas", "importance": 8}]
    Jei tinkamų faktų nėra, grąžink tuščią masyvą: []
 """

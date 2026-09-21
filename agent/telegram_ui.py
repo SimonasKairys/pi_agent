@@ -61,6 +61,7 @@ from agent.tools.calendar import (
     make_list_events_tool,
     make_update_event_tool,
 )
+from agent.tools.facts import make_forget_fact_tool, make_list_facts_tool
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +235,9 @@ def get_default_registry(
                 composio_client=composio_client,
             )
         )
+        # Facts belong to one user, so these tools exist only with a bound user.
+        registry.register(make_list_facts_tool(conn=conn, user_id=user.telegram_id))
+        registry.register(make_forget_fact_tool(conn=conn, user_id=user.telegram_id))
     else:
         registry.register(LIST_EVENTS_TOOL)
         registry.register(CREATE_EVENT_TOOL)
@@ -251,7 +255,7 @@ def make_approval_hook(update: Update, conn: Any, user: User):
         if not needs_approval(tool_name, naudotas_internetas, risk):
             return None
 
-        shown = enrich_arguments(conn, tool_name, arguments)
+        shown = enrich_arguments(conn, tool_name, arguments, user_id=user.telegram_id)
         approval_id = create_pending_approval(
             conn,
             user_id=user.telegram_id,

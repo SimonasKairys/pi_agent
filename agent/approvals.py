@@ -1,7 +1,7 @@
 """Approval layer for pi_agent.
 
 Manages confirmation workflow for sensitive actions:
-- update_event and delete_event always require confirmation
+- update_event, delete_event, and forget_fact always require confirmation
 - write operations require confirmation if web search was performed (naudotas_internetas is True)
 - pending approvals expire after 15 minutes
 - atomic transitions and strict sender checking prevent unauthorized or duplicate executions
@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
@@ -23,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 # Approval settings
 APPROVAL_EXPIRY_MINUTES = 15
+# Deleting a fact cannot be undone, so it is confirmed like an event change.
+ALWAYS_APPROVE_TOOLS = ("update_event", "delete_event", "forget_fact")
 
 
 def needs_approval(
@@ -33,13 +36,13 @@ def needs_approval(
     """Determines whether a tool call requires user confirmation.
 
     Rules:
-    1. update_event and delete_event always require approval.
+    1. update_event, delete_event, and forget_fact always require approval.
     2. Any write tool (risk='destructive' or create/update/delete) requires
        approval if web search was performed during the execution.
     3. create_event with users from users.toml and without search runs automatically.
     4. Read-only tools never require approval.
     """
-    if tool_name in ("update_event", "delete_event"):
+    if tool_name in ALWAYS_APPROVE_TOOLS:
         return True
 
     is_write = (risk == "destructive") or (tool_name in ("create_event", "update_event", "delete_event"))
@@ -89,6 +92,11 @@ def _card_time(value: Any) -> str:
         return text
 
 
+def _card_text(value: Any) -> str:
+    """Removes Markdown control characters so stored text cannot break the card."""
+    return re.sub(r"[*_`\[\]]", "", str(value))
+
+
 def format_approval_card(
     approval_id: int,
     tool_name: str,
@@ -99,6 +107,7 @@ def format_approval_card(
         "update_event": "Įvykio keitimas",
         "delete_event": "Įvykio atšaukimas",
         "create_event": "Naujo įvykio sukūrimas",
+        "forget_fact": "Fakto pamiršimas",
     }
     action_label = action_names.get(tool_name, tool_name)
 
@@ -111,6 +120,11 @@ def format_approval_card(
         lines.append(f"• **Pavadinimas**: {arguments['title']}")
     elif "event_id" in arguments:
         lines.append(f"• **Įvykio numeris**: {arguments['event_id']}")
+
+    if "fact" in arguments:
+        lines.append(f"• **Faktas**: {_card_text(arguments['fact'])}")
+    elif "fact_id" in arguments:
+        lines.append(f"• **Fakto numeris**: {arguments['fact_id']}")
 
     if "start" in arguments:
         end_str = f" - {_card_time(arguments['end'])}" if "end" in arguments else ""
@@ -252,12 +266,24 @@ def enrich_arguments(
     conn: sqlite3.Connection,
     tool_name: str,
     arguments: dict[str, Any],
+    user_id: int | None = None,
 ) -> dict[str, Any]:
     """Fills in time and attendee count for the approval card.
 
     update_event and delete_event arguments carry only event_id, so the card
     must read the stored event instead of trusting what the model passed.
+    forget_fact gets the fact text, read only from the requesting user's facts.
     """
+    if tool_name == "forget_fact":
+        fact_id = arguments.get("fact_id")
+        if fact_id is None or user_id is None:
+            return arguments
+        row = conn.execute(
+            "SELECT fact FROM facts WHERE id = ? AND user_id = ?",
+            (fact_id, user_id),
+        ).fetchone()
+        return {**arguments, "fact": row["fact"]} if row is not None else arguments
+
     if tool_name not in ("update_event", "delete_event"):
         return arguments
 
