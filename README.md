@@ -23,6 +23,8 @@ talks to each user in Lithuanian (the default) or English, set per user in `user
   due while the bot is down arrives late with a note.
 - **Notes**: "Užsirašyk ..." saves an idea or thought. Notes are searched on demand and never sent
   with every request, so they don't raise costs.
+- **Languages**: each user gets Lithuanian (the default) or English, set with `language` in
+  `users.toml`: replies, help, confirmation cards, reminders, and the command menu.
 - **Cost limits**: records the actual cost OpenRouter reports for every model call and enforces
   daily per-user and system-wide spending caps. The `/islaidos` command shows today's spending;
   admins also see every user's spending.
@@ -38,8 +40,11 @@ talks to each user in Lithuanian (the default) or English, set per user in `user
 | Command | What it does |
 |---|---|
 | `/start` | Greets the user |
-| `/pagalba` | Lists what the bot can do, with example requests |
-| `/islaidos` | Shows today's spending and the daily limits |
+| `/pagalba` or `/help` | Lists what the bot can do, with example requests |
+| `/islaidos` or `/costs` | Shows today's spending and the daily limits |
+
+Both names work for everyone. The command menu (the **/** button) shows the names in the user's
+language.
 
 Everything else is plain text: the bot understands requests such as "Primink rytoj 9 val. ...".
 
@@ -53,6 +58,7 @@ Everything else is plain text: the bot understands requests such as "Primink ryt
 | `agent/llm.py` | [OpenRouter](https://openrouter.ai) client; default model `deepseek/deepseek-v4.1-flash`, routed to the lowest-latency provider under a price cap |
 | `agent/tools/` | Web search, calendar, facts, notes, and reminder tools |
 | `agent/reminders.py` | Background loop that sends due reminders every 30 seconds |
+| `agent/i18n.py` | User-facing texts in Lithuanian and English |
 | `agent/approvals.py` | Rules for which tool calls need user confirmation |
 | `agent/context.py`, `agent/memory.py` | Context window management, summaries, and user facts |
 | `agent/consolidate.py` | Nightly memory consolidation (runs from a systemd timer) |

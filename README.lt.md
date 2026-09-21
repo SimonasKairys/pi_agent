@@ -24,6 +24,8 @@ vartotoju pagalbininkas kalba lietuviškai (numatytoji kalba) arba angliškai, p
   laikas atėjo botui neveikiant, atsiunčiamas vėliau su pastaba.
 - **Užrašai**: „Užsirašyk ...“ išsaugo idėją ar mintį. Užrašų ieškoma tik paklausus, jie nesiunčiami
   su kiekviena užklausa, todėl išlaidų nedidina.
+- **Kalbos**: kiekvienam vartotojui lietuvių (numatytoji) arba anglų kalba, nustatoma `users.toml`
+  lauku `language`: atsakymai, pagalba, patvirtinimo kortelės, priminimai ir komandų meniu.
 - **Išlaidų ribos**: įrašo tikrąją kiekvieno modelio kvietimo kainą, kurią grąžina OpenRouter, ir
   taiko dienos ribas vartotojui bei visai sistemai. Komanda `/islaidos` parodo šiandienos išlaidas,
   o administratorius mato ir kiekvieno vartotojo išlaidas.
@@ -39,8 +41,10 @@ vartotoju pagalbininkas kalba lietuviškai (numatytoji kalba) arba angliškai, p
 | Komanda | Ką daro |
 |---|---|
 | `/start` | Pasisveikina |
-| `/pagalba` | Parodo, ką botas moka, su užklausų pavyzdžiais |
-| `/islaidos` | Parodo šiandienos išlaidas ir dienos ribas |
+| `/pagalba` arba `/help` | Parodo, ką botas moka, su užklausų pavyzdžiais |
+| `/islaidos` arba `/costs` | Parodo šiandienos išlaidas ir dienos ribas |
+
+Abu pavadinimai veikia visiems. Komandų meniu (mygtukas **/**) rodo pavadinimus vartotojo kalba.
 
 Visa kita rašoma laisvu tekstu: botas supranta tokius prašymus kaip „Primink rytoj 9 val. ...“.
 
@@ -54,6 +58,7 @@ Visa kita rašoma laisvu tekstu: botas supranta tokius prašymus kaip „Primink
 | `agent/llm.py` | [OpenRouter](https://openrouter.ai) klientas; numatytasis modelis `deepseek/deepseek-v4.1-flash`, nukreipiamas į greičiausią tiekėją neviršijant kainos ribos |
 | `agent/tools/` | Paieškos, kalendoriaus, faktų, užrašų ir priminimų įrankiai |
 | `agent/reminders.py` | Fono ciklas, kuris kas 30 s išsiunčia atėjusius priminimus |
+| `agent/i18n.py` | Vartotojui rodomi tekstai lietuvių ir anglų kalbomis |
 | `agent/approvals.py` | Taisyklės, kuriems įrankių kvietimams reikia patvirtinimo |
 | `agent/context.py`, `agent/memory.py` | Konteksto valdymas, santraukos ir faktai apie vartotojus |
 | `agent/consolidate.py` | Naktinė atminties konsolidacija (paleidžia systemd laikmatis) |
