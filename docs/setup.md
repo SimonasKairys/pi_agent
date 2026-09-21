@@ -24,9 +24,10 @@ Komandas vykdykite po vieną.
 10. [Atnaujinimas](#atnaujinimas)
 11. [Teisių patikra](#teisių-patikra)
 12. [Naktinė konsolidacija](#naktinė-konsolidacija)
-13. [Duomenų šifravimas (LUKS)](#duomenų-šifravimas-luks)
-14. [Duomenų bazės patikra](#duomenų-bazės-patikra)
-15. [Atsarginės kopijos](#atsarginės-kopijos)
+13. [Savaitinė duomenų priežiūra](#savaitinė-duomenų-priežiūra)
+14. [Duomenų šifravimas (LUKS)](#duomenų-šifravimas-luks)
+15. [Duomenų bazės patikra](#duomenų-bazės-patikra)
+16. [Atsarginės kopijos](#atsarginės-kopijos)
 
 ## Serverio paruošimas
 
@@ -445,6 +446,81 @@ sudo journalctl -u piagent-consolidate.service -n 15 --no-pager
 
 `Persistent=true` po įjungimo gali paleisti papildomą praleistą paleidimą. Tai nekenksminga.
 
+## Savaitinė duomenų priežiūra
+
+Kas sekmadienį 03:15, tarp konsolidacijos (03:00) ir atsarginės kopijos (03:30), paleidžiamas
+modulis `agent.maintenance`. Jis:
+
+1. Ištrina senesnes nei 120 dienų žinutes, bet tik tas, kurios jau sutrauktos į santrauką.
+   Nesutrauktos žinutės lieka bet kokio amžiaus, o faktai apie vartotoją netrinami.
+2. Ištrina užbaigtus patvirtinimus (patvirtintus, atmestus, pasibaigusius), senesnius nei 30 dienų.
+3. Iš žurnalo `journal.jsonl` pašalina senesnes nei 90 dienų eilutes.
+4. Suspaudžia duomenų bazę: `PRAGMA wal_checkpoint(TRUNCATE)`, `PRAGMA optimize` ir `VACUUM`.
+
+Pašalintų žinučių atkurti neįmanoma: botas jas atsimena tik iš santraukos ir faktų. Iki 14 dienų
+senumo duomenys dar yra atsarginėse kopijose.
+
+Paslauga:
+
+```bash
+sudo systemctl edit --force --full piagent-maintenance.service
+```
+
+```ini
+[Unit]
+Description=Weekly database and log maintenance
+
+[Service]
+Type=oneshot
+User=piagent
+Group=piagent
+EnvironmentFile=/etc/piagent/env
+WorkingDirectory=/home/piagent/telegram-agent
+ExecStart=/home/piagent/telegram-agent/venv/bin/python -m agent.maintenance
+```
+
+Laikmatis:
+
+```bash
+sudo systemctl edit --force --full piagent-maintenance.timer
+```
+
+```ini
+[Unit]
+Description=Weekly database and log maintenance timer
+
+[Timer]
+OnCalendar=Sun *-*-* 03:15:00 Europe/Vilnius
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+Jei naudojate [šifruotą diską](#duomenų-šifravimas-luks), neleiskite priežiūrai veikti, kol diskas
+neatrakintas:
+
+```bash
+sudo mkdir -p /etc/systemd/system/piagent-maintenance.service.d
+printf '[Unit]\nConditionPathIsMountPoint=/home/piagent/data\n' \
+  | sudo tee /etc/systemd/system/piagent-maintenance.service.d/encrypted-data.conf > /dev/null
+```
+
+Įjunkite ir patikrinkite. Paskutinė komanda turi rodyti artimiausią sekmadienį 03:15.
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now piagent-maintenance.timer
+systemctl list-timers piagent-maintenance.timer
+```
+
+Paleiskite bandymą dabar. Pabaigoje turi būti `Duomenų priežiūra baigta` su ištrintų įrašų skaičiais.
+
+```bash
+sudo systemctl start piagent-maintenance.service
+sudo journalctl -u piagent-maintenance.service -n 10 --no-pager
+```
+
 ## Duomenų šifravimas (LUKS)
 
 Šis skyrius nebūtinas, bet rekomenduojamas. Jis užšifruoja visą asmeninę informaciją: duomenų bazę
@@ -468,7 +544,7 @@ Slaptažodį išsaugokite slaptažodžių tvarkyklėje: be jo duomenų atkurti n
 
 ```bash
 sudo apt install -y cryptsetup
-sudo systemctl stop piagent piagent-consolidate.timer
+sudo systemctl stop piagent piagent-consolidate.timer piagent-maintenance.timer
 ```
 
 Jei naudojate atsarginių kopijų laikmatį, sustabdykite ir jį.
@@ -534,7 +610,7 @@ Jei naudojate atsarginių kopijų skriptą, į `/etc/piagent/backup.env` įrašy
 Be šio žingsnio botas po perkrovimo sukurtų naują tuščią duomenų bazę nešifruotame diske.
 
 ```bash
-for unit in piagent piagent-consolidate; do
+for unit in piagent piagent-consolidate piagent-maintenance; do
   sudo mkdir -p /etc/systemd/system/$unit.service.d
   printf '[Unit]\nConditionPathIsMountPoint=/home/piagent/data\n' \
     | sudo tee /etc/systemd/system/$unit.service.d/encrypted-data.conf > /dev/null

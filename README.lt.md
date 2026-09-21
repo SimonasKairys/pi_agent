@@ -40,6 +40,7 @@ pagalbininkas kalba lietuviškai.
 | `agent/approvals.py` | Taisyklės, kuriems įrankių kvietimams reikia patvirtinimo |
 | `agent/context.py`, `agent/memory.py` | Konteksto valdymas, santraukos ir faktai apie vartotojus |
 | `agent/consolidate.py` | Naktinė atminties konsolidacija (paleidžia systemd laikmatis) |
+| `agent/maintenance.py` | Savaitinė priežiūra: ištrina sutrauktas senesnes nei 120 dienų žinutes, užbaigtus patvirtinimus ir senas žurnalo eilutes, tada suspaudžia duomenų bazę |
 | `agent/db.py` | SQLite saugykla, naudojimo apskaita ir ribos |
 | `agent/journal.py` | JSONL žurnalas, iš kurio pašalinami API raktai ir el. pašto adresai |
 | `backup/` | Savarankiškas šifruotų kopijų skriptas |

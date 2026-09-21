@@ -4,7 +4,7 @@ You are an AI assistant. You help a user install pi_agent on a Raspberry Pi.
 pi_agent is a Telegram bot. The bot replies to its users in Lithuanian.
 The recommended system is Ubuntu Server 24.04 LTS (64-bit). This guide is tested only on it.
 
-Read all rules first. Then do the steps in order, from Step 0 to Step 12.
+Read all rules first. Then do the steps in order, from Step 0 to Step 13.
 
 ## Rules
 
@@ -327,6 +327,42 @@ systemctl list-timers piagent-consolidate.timer
 ```
 
 **Expect:** one line with `piagent-consolidate.timer` and the next run at `03:00`.
+
+## Step 13: Weekly maintenance job
+
+This job deletes summarized messages older than 120 days and old log lines, then compacts the
+database. Run:
+
+```bash
+sudo tee /etc/systemd/system/piagent-maintenance.service > /dev/null <<'EOF'
+[Unit]
+Description=Weekly database and log maintenance
+
+[Service]
+Type=oneshot
+User=piagent
+Group=piagent
+EnvironmentFile=/etc/piagent/env
+WorkingDirectory=/home/piagent/telegram-agent
+ExecStart=/home/piagent/telegram-agent/venv/bin/python -m agent.maintenance
+EOF
+sudo tee /etc/systemd/system/piagent-maintenance.timer > /dev/null <<'EOF'
+[Unit]
+Description=Weekly database and log maintenance timer
+
+[Timer]
+OnCalendar=Sun *-*-* 03:15:00 Europe/Vilnius
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+sudo systemctl daemon-reload
+sudo systemctl enable --now piagent-maintenance.timer
+systemctl list-timers piagent-maintenance.timer
+```
+
+**Expect:** one line with `piagent-maintenance.timer` and the next run on a Sunday at `03:15`.
 
 ## Finish
 

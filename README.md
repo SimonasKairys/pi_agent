@@ -39,6 +39,7 @@ talks to users in Lithuanian.
 | `agent/approvals.py` | Rules for which tool calls need user confirmation |
 | `agent/context.py`, `agent/memory.py` | Context window management, summaries, and user facts |
 | `agent/consolidate.py` | Nightly memory consolidation (runs from a systemd timer) |
+| `agent/maintenance.py` | Weekly cleanup: deletes summarized messages older than 120 days, finished approvals, and old log lines, then compacts the database |
 | `agent/db.py` | SQLite storage, usage tracking, and limits |
 | `agent/journal.py` | JSONL run log with API keys and email addresses scrubbed |
 | `backup/` | Standalone encrypted backup script |
