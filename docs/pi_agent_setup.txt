@@ -207,6 +207,66 @@ Check the limits (turi buti: rasymas tik /home/piagent, sudo neveikia):
 	sudo systemd-run --wait --pipe --uid=piagent -p ProtectSystem=strict -p ReadWritePaths=/home/piagent -p ProtectHome=tmpfs -p BindPaths=/home/piagent -p InaccessiblePaths="/root /media /mnt /srv" bash /tmp/piagent-test.sh
 	sudo rm /tmp/piagent-test.sh
 -----------------------------------------------
+Naktine konsolidacija (atskira paslauga, ne boto dalis). Papildomus apribojimus
+(ProtectSystem ir kt.) galite nukopijuoti is `systemctl cat piagent.service`.
+Failuose privalo buti visos sekcijos ([Unit], [Service], [Timer], [Install]), kitaip
+systemctl rodo "bad unit file setting" arba "no installation config".
+Paslauga:
+	sudo systemctl edit --force --full piagent-consolidate.service
+Paste:
+[Unit]
+Description=Nightly memory consolidation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=piagent
+Group=piagent
+EnvironmentFile=/etc/piagent/env
+WorkingDirectory=/home/piagent/telegram-agent
+ExecStart=/home/piagent/telegram-agent/venv/bin/python -m agent.consolidate
+
+(be [Install]: paslauga paleidziama laikmaciu. EnvironmentFile butinas: be jo
+OpenAIError "Missing credentials", nes .env Raspberry Pi nera.)
+Laikmatis:
+	sudo systemctl edit --force --full piagent-consolidate.timer
+Paste:
+[Unit]
+Description=Nightly memory consolidation timer
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 Europe/Vilnius
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+
+(03:00, 30 min. pries kopijavima 03:30, kad irasai patektu i tos nakties kopija.
+Laikas su zona, kitaip OnCalendar naudoja sistemos zona.)
+Ijungimas ir patikra:
+	sudo systemctl daemon-reload
+	sudo systemctl enable --now piagent-consolidate.timer
+	systemctl list-timers piagent-consolidate.timer
+(turi rodyti kita 03:00 EEST/EET)
+Bandymas dabar:
+	sudo systemctl start piagent-consolidate.service
+	sudo journalctl -u piagent-consolidate.service -n 15 --no-pager
+(pabaigoje: "Naktine konsolidacija baigta"; "zinuciu nera" reiskia, kad per paras nebuvo pokalbiu)
+Jei neveikia:
+	Refusing to start, unit ... not loaded -> nera .service failo su tuo paciu pavadinimu
+	bad unit file setting -> trukstamos sekcijos; patikra: sudo systemd-analyze verify /etc/systemd/system/piagent-consolidate.timer
+	Missing credentials -> truksta EnvironmentFile=/etc/piagent/env
+	Persistent=true po ijungimo gali paleisti papildoma praleista paleidima (nekenksminga)
+-----------------------------------------------
+Backup teisiu patikra (piagent negali skaityti raktu ir keisti kopijavimo skripto):
+	sudo -u piagent cat /etc/piagent/backup.env
+(turi buti: Permission denied)
+	sudo -u piagent test -w /usr/local/lib/piagent-backup/backup.py; echo "exit=$?"
+	sudo -u piagent test -w /usr/local/lib/piagent-backup; echo "exit=$?"
+(abu turi buti exit=1; test nieko neisveda, todel reikia echo "exit=$?". exit=0 -> blogai:
+sudo chown root:root ir sudo chmod 755 tam failui/katalogui)
+-----------------------------------------------
 Backup (SD korteles gali sugesti): kodo kopija yra GitHub (git push). GitHub neapima
 /etc/piagent/env (raktai), /etc/systemd/system/piagent.service ir venv: raktus
 issaugokite slaptazodziu tvarkykleje, o venv ir paslauga atkuriama pagal sio failo zingsnius.

@@ -2,7 +2,8 @@
 
 Processes the last 24 hours of conversation history and existing facts
 for each user independently, generating 2-3 synthesizing insights.
-Runs non-interactively via systemd timer at 03:00 Europe/Vilnius.
+Runs non-interactively via systemd timer piagent-consolidate.timer at 03:00
+Europe/Vilnius (30 minutes before the 03:30 backup).
 Does NOT import agent/telegram_ui.py.
 """
 
