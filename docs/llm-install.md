@@ -331,5 +331,8 @@ Tell the user:
 - To update the bot later, run:
   `sudo -u piagent git -C /home/piagent/telegram-agent pull && sudo systemctl restart piagent`
 - To see the log, run: `sudo journalctl -u piagent -f`
+- In Telegram, `/islaidos` shows today's spending and the daily limits.
+- The bot remembers what users ask it to remember ("Prisimink, kad ..."). Users can ask what it
+  knows about them and ask it to forget a fact. Forgetting needs a button confirmation.
 - Backups and data encryption are not set up. The full guide, including LUKS encryption of
   personal data, is in `docs/setup.md`.
