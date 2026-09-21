@@ -84,12 +84,12 @@ def test_journal_entry_scrubs_api_keys(tmp_path: Path, monkeypatch: pytest.Monke
 
 def test_cost_calculated_from_usage(tmp_path: Path):
     log_file = tmp_path / "calc_test.jsonl"
-    # Rates: 0.15 USD / 1M prompt, 0.60 USD / 1M completion
-    # 1000 prompt tokens = 0.00015
-    # 500 completion tokens = 0.00030
-    # Total cost = 0.00045 USD
+    # Rates: 0.30 USD / 1M prompt, 1.20 USD / 1M completion
+    # 1000 prompt tokens = 0.00030
+    # 500 completion tokens = 0.00060
+    # Total cost = 0.00090 USD
     expected_cost = calculate_cost(prompt_tokens=1000, completion_tokens=500)
-    assert abs(expected_cost - 0.00045) < 1e-9
+    assert abs(expected_cost - 0.00090) < 1e-9
 
     entry = record_journal_entry(
         run_id="run_calc_1",
@@ -101,7 +101,7 @@ def test_cost_calculated_from_usage(tmp_path: Path):
     )
 
     assert entry["tokens"] == 1500
-    assert abs(entry["cost_usd"] - 0.00045) < 1e-9
+    assert abs(entry["cost_usd"] - 0.00090) < 1e-9
 
 
 def test_read_journal_entries(tmp_path: Path):

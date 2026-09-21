@@ -9,7 +9,7 @@ import os
 from dataclasses import dataclass
 from typing import Any
 from openai import AsyncOpenAI
-from agent.db import calculate_cost
+from agent.db import INPUT_TOKEN_PRICE_PER_M, OUTPUT_TOKEN_PRICE_PER_M, calculate_cost
 from agent.prompts import SUMMARY_SYSTEM_PROMPT, build_summary_prompt
 
 # Model and request settings
@@ -17,6 +17,19 @@ DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MAX_TOKENS = 1500
 REQUEST_TIMEOUT = 120.0
+# OpenRouter routing: the lowest-latency provider. Measured on the Pi, this cut a short
+# answer from 2-5 s to about 1 s. Reasoning stays on: turning it off saved only ~0.5 s
+# and risks mistakes in date arithmetic and multi-step tool use.
+# max_price keeps OpenRouter within the rates db.py uses for the daily cost limits.
+OPENROUTER_EXTRA_BODY: dict[str, Any] = {
+    "provider": {
+        "sort": "latency",
+        "max_price": {
+            "prompt": INPUT_TOKEN_PRICE_PER_M,
+            "completion": OUTPUT_TOKEN_PRICE_PER_M,
+        },
+    },
+}
 
 
 @dataclass
@@ -59,6 +72,7 @@ class LLMClient:
             "model": self.model,
             "messages": messages,
             "max_tokens": max_tokens,
+            "extra_body": OPENROUTER_EXTRA_BODY,
         }
         if tools:
             kwargs["tools"] = tools

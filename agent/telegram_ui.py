@@ -7,6 +7,7 @@ per-user locks, and command/message handling.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import uuid
 from typing import Any
@@ -192,6 +193,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await _answer(update, context, user, conn)
         finally:
             conn.close()
+
+
+# Telegram shows "typing..." for about 5 s, so it is resent until the answer is ready.
+TYPING_INTERVAL_SECONDS = 4.0
+
+
+@contextlib.asynccontextmanager
+async def keep_typing(chat: Any):
+    """Shows the typing indicator for as long as the block runs."""
+
+    async def pulse() -> None:
+        while True:
+            try:
+                await chat.send_action(action="typing")
+            except Exception:
+                logger.debug("Nepavyko išsiųsti rašymo indikatoriaus", exc_info=True)
+            await asyncio.sleep(TYPING_INTERVAL_SECONDS)
+
+    task = asyncio.create_task(pulse())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 
 def get_default_registry(
@@ -406,8 +432,6 @@ async def _answer(
             system_prompt=system_prompt,
         )
 
-    await update.message.chat.send_action(action="typing")
-
     try:
         tool_registry: ToolRegistry
         if context and hasattr(context, "bot_data") and "tool_registry" in context.bot_data:
@@ -424,14 +448,15 @@ async def _answer(
                 composio_client=composio_client,
             )
 
-        loop_result = await run_loop(
-            llm_client=llm_client,
-            tool_registry=tool_registry,
-            messages=messages,
-            user_id=user_id,
-            run_id=run_id,
-            approval_hook=make_approval_hook(update, conn, user),
-        )
+        async with keep_typing(update.message.chat):
+            loop_result = await run_loop(
+                llm_client=llm_client,
+                tool_registry=tool_registry,
+                messages=messages,
+                user_id=user_id,
+                run_id=run_id,
+                approval_hook=make_approval_hook(update, conn, user),
+            )
         record_usage(conn, user_id=user_id, cost_usd=loop_result.total_cost_usd)
         add_message(
             conn,

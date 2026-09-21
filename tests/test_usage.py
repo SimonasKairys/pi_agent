@@ -16,13 +16,13 @@ from agent.db import (
 
 
 def test_calculate_cost():
-    # 1M prompt @ 0.15 + 1M completion @ 0.60 = 0.75 USD
+    # 1M prompt @ 0.30 + 1M completion @ 1.20 = 1.50 USD
     cost = calculate_cost(1_000_000, 1_000_000)
-    assert pytest.approx(cost, rel=1e-5) == 0.75
+    assert pytest.approx(cost, rel=1e-5) == 1.50
 
-    # 1000 prompt (0.00015) + 500 completion (0.00030) = 0.00045 USD
+    # 1000 prompt (0.00030) + 500 completion (0.00060) = 0.00090 USD
     cost_small = calculate_cost(1000, 500)
-    assert pytest.approx(cost_small, rel=1e-5) == 0.00045
+    assert pytest.approx(cost_small, rel=1e-5) == 0.00090
 
 
 def test_usage_under_limit(tmp_path: Path):

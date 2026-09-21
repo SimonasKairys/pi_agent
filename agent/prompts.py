@@ -47,6 +47,17 @@ APPROVAL_EXPIRED_MESSAGE = (
 BUSY_MESSAGE = "Jūsų ankstesnė užklausa dar vykdoma. Prašome palaukti."
 
 
+WEEKDAYS_LT = (
+    "pirmadienis",
+    "antradienis",
+    "trečiadienis",
+    "ketvirtadienis",
+    "penktadienis",
+    "šeštadienis",
+    "sekmadienis",
+)
+
+
 def format_usd(amount: float) -> str:
     """Formats a USD amount with the Lithuanian decimal comma."""
     return f"{amount:.2f}".replace(".", ",")
@@ -80,7 +91,9 @@ def build_system_prompt(
             tz = zoneinfo.ZoneInfo(timezone_name)
         except Exception:
             tz = zoneinfo.ZoneInfo("Europe/Vilnius")
-        current_time_str = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
+        now = datetime.now(tz)
+        # The weekday is given outright: "next Tuesday" is easy to get wrong otherwise.
+        current_time_str = f"{now:%Y-%m-%d %H:%M}, {WEEKDAYS_LT[now.weekday()]}"
 
     allowed_str = ", ".join(allowed_names) if allowed_names else "nėra kitų dalyvių"
 

@@ -73,3 +73,18 @@ def test_system_prompt_contains_today_date_in_user_timezone():
         assert tz_name in prompt
         assert "Simonas" in prompt
 
+
+
+def test_system_prompt_includes_weekday(monkeypatch):
+    import agent.prompts as prompts
+    from datetime import datetime as real_datetime
+
+    class FixedDatetime(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return real_datetime(2026, 9, 21, 21, 19, tzinfo=tz)
+
+    monkeypatch.setattr(prompts, "datetime", FixedDatetime)
+    prompt = build_system_prompt(name="Simonas", timezone_name="Europe/Vilnius")
+
+    assert "2026-09-21 21:19, pirmadienis" in prompt

@@ -18,9 +18,10 @@ from agent.prompts import (
 
 CURRENT_SCHEMA_VERSION = 4
 
-# Model pricing (USD per 1M tokens) and daily limits
-INPUT_TOKEN_PRICE_PER_M = 0.15
-OUTPUT_TOKEN_PRICE_PER_M = 0.60
+# Model pricing (USD per 1M tokens) and daily limits. These are the highest prices
+# llm.py lets OpenRouter pay, so the recorded cost is never below the real one.
+INPUT_TOKEN_PRICE_PER_M = 0.30
+OUTPUT_TOKEN_PRICE_PER_M = 1.20
 MAX_USER_DAILY_COST_USD = 1.00
 MAX_TOTAL_DAILY_COST_USD = 4.00
 MAX_USER_DAILY_EVENTS = 20
