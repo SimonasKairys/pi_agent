@@ -18,8 +18,9 @@ pagalbininkas kalba lietuviškai.
 - **Atmintis**: paskutines žinutes laiko pažodžiui, senesnę istoriją sutraukia, išsaugo svarbius
   faktus apie kiekvieną vartotoją ir kas naktį juos konsoliduoja. Vartotojas gali paklausti, ką
   botas apie jį atsimena, ir paprašyti pamiršti faktą (`list_facts`, `forget_fact`).
-- **Išlaidų ribos**: skaičiuoja žetonus kiekvienam vartotojui ir taiko dienos ribas vartotojui
-  bei visai sistemai.
+- **Išlaidų ribos**: įrašo tikrąją kiekvieno modelio kvietimo kainą, kurią grąžina OpenRouter, ir
+  taiko dienos ribas vartotojui bei visai sistemai. Komanda `/islaidos` parodo šiandienos išlaidas,
+  o administratorius mato ir kiekvieno vartotojo išlaidas.
 - **Apsauga nuo raginimo injekcijų**: įrankių rezultatai, kalendoriaus įvykių tekstas, paieškos
   rezultatai ir išsaugoti faktai laikomi duomenimis, ne nurodymais.
 - **Atsarginės kopijos**: nebūtinas skriptas šifruoja SQLite duomenų bazę su `gpg` ir įkelia ją į

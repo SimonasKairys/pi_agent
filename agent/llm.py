@@ -20,8 +20,10 @@ REQUEST_TIMEOUT = 120.0
 # OpenRouter routing: the lowest-latency provider. Measured on the Pi, this cut a short
 # answer from 2-5 s to about 1 s. Reasoning stays on: turning it off saved only ~0.5 s
 # and risks mistakes in date arithmetic and multi-step tool use.
-# max_price keeps OpenRouter within the rates db.py uses for the daily cost limits.
+# max_price keeps OpenRouter within the rates db.py uses when no real cost is reported.
+# usage.include makes OpenRouter return the actual cost of each call.
 OPENROUTER_EXTRA_BODY: dict[str, Any] = {
+    "usage": {"include": True},
     "provider": {
         "sort": "latency",
         "max_price": {
@@ -41,6 +43,14 @@ class LLMResponse:
     cost_usd: float
     tool_calls: list[Any] | None = None
     raw_response: Any = None
+
+
+def _reported_cost(usage: Any) -> float | None:
+    """Returns the USD cost OpenRouter reported for the call, or None if it is missing."""
+    cost = getattr(usage, "cost", None)
+    if isinstance(cost, bool) or not isinstance(cost, (int, float)):
+        return None
+    return float(cost)
 
 
 class LLMClient:
@@ -87,7 +97,9 @@ class LLMClient:
         completion_tokens = usage.completion_tokens if usage else 0
         total_tokens = usage.total_tokens if usage else (prompt_tokens + completion_tokens)
 
-        cost_usd = calculate_cost(prompt_tokens, completion_tokens)
+        cost_usd = _reported_cost(usage)
+        if cost_usd is None:
+            cost_usd = calculate_cost(prompt_tokens, completion_tokens)
 
         return LLMResponse(
             content=content,

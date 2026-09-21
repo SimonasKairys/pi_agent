@@ -14,7 +14,7 @@ import zoneinfo
 from datetime import datetime
 from typing import Any
 
-from agent.db import RESET_TIMEZONE
+from agent.db import RESET_TIMEZONE, record_usage
 
 logger = logging.getLogger(__name__)
 
@@ -252,6 +252,16 @@ async def extract_facts(
     assistant_message: str,
 ) -> list[dict[str, Any]]:
     """Prompts LLM to extract facts and importance ratings from a conversation turn."""
+    facts, _ = await _request_facts(llm_client, user_message, assistant_message)
+    return facts
+
+
+async def _request_facts(
+    llm_client: Any,
+    user_message: str,
+    assistant_message: str,
+) -> tuple[list[dict[str, Any]], float]:
+    """Returns the extracted facts and the cost of the model call."""
     prompt_messages = [
         {"role": "system", "content": FACT_EXTRACTION_SYSTEM_PROMPT},
         {
@@ -262,10 +272,12 @@ async def extract_facts(
     try:
         response = await llm_client.generate(messages=prompt_messages)
         content = response.content if hasattr(response, "content") else str(response)
-        return _parse_extracted_facts(content)
+        cost = getattr(response, "cost_usd", 0.0)
+        cost = float(cost) if isinstance(cost, (int, float)) else 0.0
+        return _parse_extracted_facts(content), cost
     except Exception:
         logger.exception("Klaida nuskaitant faktus iš modelio atsako")
-        return []
+        return [], 0.0
 
 
 async def extract_and_save_facts(
@@ -280,7 +292,10 @@ async def extract_and_save_facts(
 
     Returns a list of created fact IDs.
     """
-    raw_facts = await extract_facts(llm_client, user_message, assistant_message)
+    raw_facts, cost = await _request_facts(llm_client, user_message, assistant_message)
+    # The extraction call is paid for too, so it counts toward the daily limit.
+    if cost > 0:
+        record_usage(conn, user_id=user_id, cost_usd=cost)
     saved_ids: list[int] = []
     for item in raw_facts:
         fact_id = save_fact(

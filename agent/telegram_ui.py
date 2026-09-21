@@ -24,8 +24,15 @@ from telegram.ext import (
 from agent.config import User, load_guests, load_users
 from agent.context import add_message, build_context
 from agent.db import (
+    MAX_TOTAL_DAILY_COST_USD,
+    MAX_USER_DAILY_COST_USD,
+    MAX_USER_DAILY_EVENTS,
     check_daily_cost_limit,
     get_connection,
+    get_current_day,
+    get_total_daily_cost,
+    get_user_daily_cost,
+    get_user_daily_events,
     record_usage,
     LimitExceededError,
 )
@@ -49,6 +56,7 @@ from agent.prompts import (
     START_MESSAGE,
     UNAUTHORIZED_MESSAGE,
     build_system_prompt,
+    format_usd,
 )
 from agent.tools.registry import ToolRegistry
 from agent.tools.search import SEARCH_TOOL
@@ -170,6 +178,61 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     if update.message:
         await update.message.reply_text(START_MESSAGE)
+
+
+def _usd_precise(amount: float) -> str:
+    """Formats a small USD amount with four decimals and the Lithuanian decimal comma."""
+    return f"{amount:.4f}".replace(".", ",")
+
+
+def build_costs_report(conn: Any, user: User, day: str | None = None) -> str:
+    """Returns today's spending and limits; admins also see every user's spending."""
+    day = day or get_current_day()
+    user_cost = get_user_daily_cost(conn, user.telegram_id, day=day)
+    events = get_user_daily_events(conn, user.telegram_id, day=day)
+    lines = [
+        f"Išlaidos šiandien ({day}):",
+        f"• Jūsų: {_usd_precise(user_cost)} USD iš {format_usd(MAX_USER_DAILY_COST_USD)} USD",
+        f"• Sukurta įvykių: {events} iš {MAX_USER_DAILY_EVENTS}",
+    ]
+    if user.role == "admin":
+        total = get_total_daily_cost(conn, day=day)
+        lines.append(
+            f"• Visos sistemos: {_usd_precise(total)} USD iš {format_usd(MAX_TOTAL_DAILY_COST_USD)} USD"
+        )
+        try:
+            names = {u.telegram_id: u.name for u in load_users()}
+        except Exception:
+            logger.exception("Klaida nuskaitant vartotojų sąrašą išlaidų ataskaitai")
+            names = {}
+        rows = conn.execute(
+            "SELECT user_id, cost_usd FROM usage WHERE day = ? ORDER BY cost_usd DESC",
+            (day,),
+        ).fetchall()
+        for row in rows:
+            name = names.get(row["user_id"], str(row["user_id"]))
+            lines.append(f"  – {name}: {_usd_precise(row['cost_usd'])} USD")
+    return "\n".join(lines)
+
+
+async def handle_costs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles /islaidos: shows today's spending against the daily limits."""
+    if update.effective_chat is None or update.effective_chat.type != "private":
+        return
+    if update.effective_user is None or update.message is None:
+        return
+
+    user = get_authorized_user(update.effective_user.id)
+    if user is None:
+        await update.message.reply_text(UNAUTHORIZED_MESSAGE)
+        return
+
+    conn = get_connection()
+    try:
+        report = build_costs_report(conn, user)
+    finally:
+        conn.close()
+    await update.message.reply_text(report)
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -504,6 +567,7 @@ def create_application(
         app.bot_data["composio_client"] = composio_client
 
     app.add_handler(CommandHandler("start", handle_start))
+    app.add_handler(CommandHandler("islaidos", handle_costs))
     app.add_handler(
         CallbackQueryHandler(handle_approval_callback, pattern=r"^(approve|reject):\d+$")
     )

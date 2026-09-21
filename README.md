@@ -17,8 +17,9 @@ talks to users in Lithuanian.
 - **Memory**: keeps recent messages verbatim, summarizes older history, stores important facts
   about each user, and consolidates them nightly. Users can ask what the bot remembers and ask
   it to forget a fact (`list_facts`, `forget_fact`).
-- **Cost limits**: tracks token usage per user and enforces daily per-user and system-wide
-  spending caps.
+- **Cost limits**: records the actual cost OpenRouter reports for every model call and enforces
+  daily per-user and system-wide spending caps. The `/islaidos` command shows today's spending;
+  admins also see every user's spending.
 - **Prompt-injection defense**: tool results, calendar event text, search results, and stored
   facts are wrapped and treated as data, not instructions.
 - **Backups**: an optional script encrypts the SQLite database with `gpg` and uploads it to
