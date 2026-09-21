@@ -10,6 +10,7 @@ from agent.db import get_connection
 from agent.maintenance import (
     delete_old_approvals,
     delete_old_messages,
+    delete_old_reminders,
     run_maintenance,
     trim_journal,
 )
@@ -139,6 +140,24 @@ def test_run_maintenance_compacts_database(conn, tmp_path: Path):
 
     result = run_maintenance(conn, tmp_path / "journal.jsonl", now=NOW)
 
-    assert result == {"messages": 301, "approvals": 0, "journal_lines": 0}
+    assert result == {"messages": 301, "approvals": 0, "reminders": 0, "journal_lines": 0}
     assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     assert conn.execute("PRAGMA freelist_count").fetchone()[0] == 0
+
+
+def test_deletes_only_finished_old_reminders(conn):
+    rows = [
+        (_ago(40), None), (None, _ago(40)),   # sent / failed long ago: deleted
+        (_ago(5), None),                      # sent recently: kept
+        (None, None),                         # pending: kept
+    ]
+    for sent_at, failed_at in rows:
+        conn.execute(
+            "INSERT INTO reminders (user_id, created_by, text, due_at, created_at, sent_at, failed_at) "
+            "VALUES (?, ?, 'x', ?, ?, ?, ?)",
+            (USER_A, USER_A, _ago(50), _ago(60), sent_at, failed_at),
+        )
+    conn.commit()
+
+    assert delete_old_reminders(conn, NOW) == 2
+    assert conn.execute("SELECT COUNT(*) FROM reminders").fetchone()[0] == 2

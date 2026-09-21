@@ -335,6 +335,10 @@ sudo piagent-unlock                  # po perkrovimo, jei naudojate šifruotą d
 
 Telegram komandos: `/start` pasisveikina, o `/islaidos` parodo šiandienos išlaidas ir dienos ribas.
 
+Kiekvienas vartotojas turi bent kartą parašyti botui `/start`. Kitaip Telegram neleidžia botui
+pirmam atsiųsti žinutės, ir kitų sukurti priminimai tam vartotojui nepasieks. Kūrėjas tada gauna
+pranešimą, kad priminimo išsiųsti nepavyko.
+
 ## Atnaujinimas
 
 Išsiuntę pakeitimus į GitHub (`git push`), Raspberry Pi paleiskite toliau esančias komandas. Jei
@@ -454,8 +458,10 @@ modulis `agent.maintenance`. Jis:
 1. Ištrina senesnes nei 120 dienų žinutes, bet tik tas, kurios jau sutrauktos į santrauką.
    Nesutrauktos žinutės lieka bet kokio amžiaus, o faktai apie vartotoją netrinami.
 2. Ištrina užbaigtus patvirtinimus (patvirtintus, atmestus, pasibaigusius), senesnius nei 30 dienų.
-3. Iš žurnalo `journal.jsonl` pašalina senesnes nei 90 dienų eilutes.
-4. Suspaudžia duomenų bazę: `PRAGMA wal_checkpoint(TRUNCATE)`, `PRAGMA optimize` ir `VACUUM`.
+3. Ištrina išsiųstus ir neišsiųstus (nepasiekusius gavėjo) priminimus, senesnius nei 30 dienų.
+   Laukiantys priminimai ir užrašai netrinami.
+4. Iš žurnalo `journal.jsonl` pašalina senesnes nei 90 dienų eilutes.
+5. Suspaudžia duomenų bazę: `PRAGMA wal_checkpoint(TRUNCATE)`, `PRAGMA optimize` ir `VACUUM`.
 
 Pašalintų žinučių atkurti neįmanoma: botas jas atsimena tik iš santraukos ir faktų. Iki 14 dienų
 senumo duomenys dar yra atsarginėse kopijose.

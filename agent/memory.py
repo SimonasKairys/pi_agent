@@ -37,6 +37,7 @@ Taisyklės:
 5. Jei vartotojas aiškiai prašo ką nors prisiminti (pvz. "prisimink", "įsimink", "atsimink"),
    išskirk tą faktą su svarba 9.
 6. Neišskirk prašymų ką nors pamiršti ir faktų apie pačią atmintį (pvz. "vartotojas paprašė pamiršti").
+   Neišskirk ir priminimų bei užrašų (pvz. "primink rytoj...", "užsirašyk idėją...").
 7. Atsakymą pateik griežtai kaip JSON masyvą:
    [{"fact": "fakto tekstas", "importance": 8}]
    Jei tinkamų faktų nėra, grąžink tuščią masyvą: []

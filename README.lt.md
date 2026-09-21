@@ -13,11 +13,17 @@ pagalbininkas kalba lietuviškai.
   botu nesinaudoja.
 - **Paieška internete**: naudoja [Tavily](https://tavily.com) su ribotu rezultatų skaičiumi ir
   ištraukų ilgiu.
-- **Patvirtinimai**: `update_event`, `delete_event` ir `forget_fact` visada reikalauja patvirtinimo mygtuko
+- **Patvirtinimai**: `update_event`, `delete_event`, `forget_fact`, `delete_note`, `delete_reminder` ir
+  priminimai kitiems vartotojams visada reikalauja patvirtinimo mygtuko
   Telegram. Bet koks įrašymas po paieškos internete taip pat reikalauja patvirtinimo.
 - **Atmintis**: paskutines žinutes laiko pažodžiui, senesnę istoriją sutraukia, išsaugo svarbius
   faktus apie kiekvieną vartotoją ir kas naktį juos konsoliduoja. Vartotojas gali paklausti, ką
   botas apie jį atsimena, ir paprašyti pamiršti faktą (`list_facts`, `forget_fact`).
+- **Priminimai**: „Primink rytoj 9 val. ...“ sukuria vienkartinį priminimą Telegram sau arba kitam
+  boto vartotojui (su patvirtinimo mygtuku). Priminimai išlieka perkrovus botą, o priminimas, kurio
+  laikas atėjo botui neveikiant, atsiunčiamas vėliau su pastaba.
+- **Užrašai**: „Užsirašyk ...“ išsaugo idėją ar mintį. Užrašų ieškoma tik paklausus, jie nesiunčiami
+  su kiekviena užklausa, todėl išlaidų nedidina.
 - **Išlaidų ribos**: įrašo tikrąją kiekvieno modelio kvietimo kainą, kurią grąžina OpenRouter, ir
   taiko dienos ribas vartotojui bei visai sistemai. Komanda `/islaidos` parodo šiandienos išlaidas,
   o administratorius mato ir kiekvieno vartotojo išlaidas.
@@ -36,11 +42,12 @@ pagalbininkas kalba lietuviškai.
 | `agent/telegram_ui.py` | Telegram apdorojimas, patvirtinimo mygtukai ir žinučių skaidymas |
 | `agent/loop.py` | Įrankius kviečiantis agento ciklas su iteracijų, laiko, žetonų ir kartojimų ribomis |
 | `agent/llm.py` | [OpenRouter](https://openrouter.ai) klientas; numatytasis modelis `deepseek/deepseek-v4.1-flash`, nukreipiamas į greičiausią tiekėją neviršijant kainos ribos |
-| `agent/tools/` | `search_web`, `list_events`, `create_event`, `update_event`, `delete_event`, `list_facts` ir `forget_fact` |
+| `agent/tools/` | Paieškos, kalendoriaus, faktų, užrašų ir priminimų įrankiai |
+| `agent/reminders.py` | Fono ciklas, kuris kas 30 s išsiunčia atėjusius priminimus |
 | `agent/approvals.py` | Taisyklės, kuriems įrankių kvietimams reikia patvirtinimo |
 | `agent/context.py`, `agent/memory.py` | Konteksto valdymas, santraukos ir faktai apie vartotojus |
 | `agent/consolidate.py` | Naktinė atminties konsolidacija (paleidžia systemd laikmatis) |
-| `agent/maintenance.py` | Savaitinė priežiūra: ištrina sutrauktas senesnes nei 120 dienų žinutes, užbaigtus patvirtinimus ir senas žurnalo eilutes, tada suspaudžia duomenų bazę |
+| `agent/maintenance.py` | Savaitinė priežiūra: ištrina sutrauktas senesnes nei 120 dienų žinutes, užbaigtus patvirtinimus ir priminimus bei senas žurnalo eilutes, tada suspaudžia duomenų bazę |
 | `agent/db.py` | SQLite saugykla, naudojimo apskaita ir ribos |
 | `agent/journal.py` | JSONL žurnalas, iš kurio pašalinami API raktai ir el. pašto adresai |
 | `backup/` | Savarankiškas šifruotų kopijų skriptas |

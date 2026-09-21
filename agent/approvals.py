@@ -18,25 +18,35 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from agent.reminders import local_time
 from agent.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
 # Approval settings
 APPROVAL_EXPIRY_MINUTES = 15
-# Deleting a fact cannot be undone, so it is confirmed like an event change.
-ALWAYS_APPROVE_TOOLS = ("update_event", "delete_event", "forget_fact")
+# Deleting a fact, note, or reminder cannot be undone, so it is confirmed like an event change.
+ALWAYS_APPROVE_TOOLS = (
+    "update_event",
+    "delete_event",
+    "forget_fact",
+    "delete_note",
+    "delete_reminder",
+)
 
 
 def needs_approval(
     tool_name: str,
     naudotas_internetas: bool = False,
     risk: str | None = None,
+    arguments: dict[str, Any] | None = None,
+    caller_name: str | None = None,
 ) -> bool:
     """Determines whether a tool call requires user confirmation.
 
     Rules:
-    1. update_event, delete_event, and forget_fact always require approval.
+    1. update_event, delete_event, forget_fact, delete_note, and delete_reminder
+       always require approval, and so does create_reminder for another user.
     2. Any write tool (risk='destructive' or create/update/delete) requires
        approval if web search was performed during the execution.
     3. create_event with users from users.toml and without search runs automatically.
@@ -44,6 +54,11 @@ def needs_approval(
     """
     if tool_name in ALWAYS_APPROVE_TOOLS:
         return True
+
+    if tool_name == "create_reminder" and arguments:
+        for_name = str(arguments.get("for_name") or "").strip()
+        if for_name and (caller_name is None or for_name.casefold() != caller_name.casefold()):
+            return True
 
     is_write = (risk == "destructive") or (tool_name in ("create_event", "update_event", "delete_event"))
 
@@ -108,6 +123,9 @@ def format_approval_card(
         "delete_event": "Įvykio atšaukimas",
         "create_event": "Naujo įvykio sukūrimas",
         "forget_fact": "Fakto pamiršimas",
+        "create_reminder": "Priminimas kitam vartotojui",
+        "delete_reminder": "Priminimo atšaukimas",
+        "delete_note": "Užrašo trynimas",
     }
     action_label = action_names.get(tool_name, tool_name)
 
@@ -125,6 +143,17 @@ def format_approval_card(
         lines.append(f"• **Faktas**: {_card_text(arguments['fact'])}")
     elif "fact_id" in arguments:
         lines.append(f"• **Fakto numeris**: {arguments['fact_id']}")
+
+    if "for_name" in arguments:
+        lines.append(f"• **Kam**: {_card_text(arguments['for_name'])}")
+    if "when" in arguments:
+        lines.append(f"• **Kada**: {_card_time(arguments['when'])}")
+    if "text" in arguments:
+        lines.append(f"• **Tekstas**: {_card_text(arguments['text'])}")
+    elif "note_id" in arguments:
+        lines.append(f"• **Užrašo numeris**: {arguments['note_id']}")
+    elif "reminder_id" in arguments:
+        lines.append(f"• **Priminimo numeris**: {arguments['reminder_id']}")
 
     if "start" in arguments:
         end_str = f" - {_card_time(arguments['end'])}" if "end" in arguments else ""
@@ -267,13 +296,36 @@ def enrich_arguments(
     tool_name: str,
     arguments: dict[str, Any],
     user_id: int | None = None,
+    timezone_name: str = "Europe/Vilnius",
 ) -> dict[str, Any]:
     """Fills in time and attendee count for the approval card.
 
     update_event and delete_event arguments carry only event_id, so the card
     must read the stored event instead of trusting what the model passed.
-    forget_fact gets the fact text, read only from the requesting user's facts.
+    forget_fact gets the fact text, read only from the requesting user's facts;
+    delete_note and delete_reminder likewise read only the user's own rows.
     """
+    if tool_name == "delete_note":
+        note_id = arguments.get("note_id")
+        if note_id is None or user_id is None:
+            return arguments
+        row = conn.execute(
+            "SELECT text FROM notes WHERE id = ? AND user_id = ?", (note_id, user_id)
+        ).fetchone()
+        return {**arguments, "text": row["text"]} if row is not None else arguments
+
+    if tool_name == "delete_reminder":
+        reminder_id = arguments.get("reminder_id")
+        if reminder_id is None or user_id is None:
+            return arguments
+        row = conn.execute(
+            "SELECT text, due_at FROM reminders WHERE id = ? AND sent_at IS NULL "
+            "AND (created_by = ? OR user_id = ?)",
+            (reminder_id, user_id, user_id),
+        ).fetchone()
+        if row is None:
+            return arguments
+        return {**arguments, "text": row["text"], "when": local_time(row["due_at"], timezone_name)}
     if tool_name == "forget_fact":
         fact_id = arguments.get("fact_id")
         if fact_id is None or user_id is None:

@@ -12,11 +12,17 @@ talks to users in Lithuanian.
   [Composio](https://composio.dev). Invite only people listed in `users.toml`, including guests
   who don't use the bot.
 - **Web search**: uses [Tavily](https://tavily.com) with capped result counts and snippet lengths.
-- **Approvals**: `update_event`, `delete_event`, and `forget_fact` always require a confirmation button in
+- **Approvals**: `update_event`, `delete_event`, `forget_fact`, `delete_note`, `delete_reminder`, and
+  reminders for other users always require a confirmation button in
   Telegram. Any write after a web search also requires confirmation.
 - **Memory**: keeps recent messages verbatim, summarizes older history, stores important facts
   about each user, and consolidates them nightly. Users can ask what the bot remembers and ask
   it to forget a fact (`list_facts`, `forget_fact`).
+- **Reminders**: "Primink rytoj 9 val. ..." schedules a one-time Telegram reminder, for yourself or
+  another bot user (with a confirmation button). Reminders survive restarts; a reminder that falls
+  due while the bot is down arrives late with a note.
+- **Notes**: "Užsirašyk ..." saves an idea or thought. Notes are searched on demand and never sent
+  with every request, so they don't raise costs.
 - **Cost limits**: records the actual cost OpenRouter reports for every model call and enforces
   daily per-user and system-wide spending caps. The `/islaidos` command shows today's spending;
   admins also see every user's spending.
@@ -35,11 +41,12 @@ talks to users in Lithuanian.
 | `agent/telegram_ui.py` | Telegram handlers, approval buttons, and message splitting |
 | `agent/loop.py` | Tool-calling agent loop with iteration, time, token, and retry limits |
 | `agent/llm.py` | [OpenRouter](https://openrouter.ai) client; default model `deepseek/deepseek-v4.1-flash`, routed to the lowest-latency provider under a price cap |
-| `agent/tools/` | `search_web`, `list_events`, `create_event`, `update_event`, `delete_event`, `list_facts`, and `forget_fact` |
+| `agent/tools/` | Web search, calendar, facts, notes, and reminder tools |
+| `agent/reminders.py` | Background loop that sends due reminders every 30 seconds |
 | `agent/approvals.py` | Rules for which tool calls need user confirmation |
 | `agent/context.py`, `agent/memory.py` | Context window management, summaries, and user facts |
 | `agent/consolidate.py` | Nightly memory consolidation (runs from a systemd timer) |
-| `agent/maintenance.py` | Weekly cleanup: deletes summarized messages older than 120 days, finished approvals, and old log lines, then compacts the database |
+| `agent/maintenance.py` | Weekly cleanup: deletes summarized messages older than 120 days, finished approvals and reminders, and old log lines, then compacts the database |
 | `agent/db.py` | SQLite storage, usage tracking, and limits |
 | `agent/journal.py` | JSONL run log with API keys and email addresses scrubbed |
 | `backup/` | Standalone encrypted backup script |

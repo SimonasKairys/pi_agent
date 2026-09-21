@@ -71,6 +71,9 @@ from agent.tools.calendar import (
     make_update_event_tool,
 )
 from agent.tools.facts import make_forget_fact_tool, make_list_facts_tool
+from agent.tools.notes import make_note_tools
+from agent.tools.reminders import make_reminder_tools
+from agent.reminders import start_reminder_loop, stop_reminder_loop
 
 logger = logging.getLogger(__name__)
 
@@ -327,6 +330,10 @@ def get_default_registry(
         # Facts belong to one user, so these tools exist only with a bound user.
         registry.register(make_list_facts_tool(conn=conn, user_id=user.telegram_id))
         registry.register(make_forget_fact_tool(conn=conn, user_id=user.telegram_id))
+        for tool in make_note_tools(conn=conn, user_id=user.telegram_id):
+            registry.register(tool)
+        for tool in make_reminder_tools(conn=conn, user=user):
+            registry.register(tool)
     else:
         registry.register(LIST_EVENTS_TOOL)
         registry.register(CREATE_EVENT_TOOL)
@@ -341,10 +348,14 @@ def make_approval_hook(update: Update, conn: Any, user: User):
     Returning a string tells the loop not to execute the tool.
     """
     async def hook(tool_name, arguments, risk, naudotas_internetas):
-        if not needs_approval(tool_name, naudotas_internetas, risk):
+        if not needs_approval(
+            tool_name, naudotas_internetas, risk, arguments=arguments, caller_name=user.name
+        ):
             return None
 
-        shown = enrich_arguments(conn, tool_name, arguments, user_id=user.telegram_id)
+        shown = enrich_arguments(
+            conn, tool_name, arguments, user_id=user.telegram_id, timezone_name=user.timezone
+        )
         approval_id = create_pending_approval(
             conn,
             user_id=user.telegram_id,
@@ -558,7 +569,14 @@ def create_application(
     composio_client: Any = None,
 ) -> Application:
     """Creates and configures the Telegram Application."""
-    app = Application.builder().token(token).concurrent_updates(CONCURRENT_UPDATES).build()
+    app = (
+        Application.builder()
+        .token(token)
+        .concurrent_updates(CONCURRENT_UPDATES)
+        .post_init(start_reminder_loop)
+        .post_shutdown(stop_reminder_loop)
+        .build()
+    )
     if llm_client is not None:
         app.bot_data["llm_client"] = llm_client
     if tool_registry is not None:

@@ -4,8 +4,9 @@ Runs non-interactively via systemd timer piagent-maintenance.timer (Sundays at 0
 Europe/Vilnius, between the 03:00 consolidation and the 03:30 backup):
 1. Deletes messages older than MESSAGE_RETENTION_DAYS that a summary already covers.
 2. Deletes finished approvals older than APPROVAL_RETENTION_DAYS.
-3. Drops journal lines older than JOURNAL_RETENTION_DAYS.
-4. Checkpoints the WAL, refreshes query statistics, and compacts the file (VACUUM).
+3. Deletes sent or failed reminders older than REMINDER_RETENTION_DAYS.
+4. Drops journal lines older than JOURNAL_RETENTION_DAYS.
+5. Checkpoints the WAL, refreshes query statistics, and compacts the file (VACUUM).
 Does NOT import agent/telegram_ui.py.
 """
 
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 # Retention limits
 MESSAGE_RETENTION_DAYS = 120
 APPROVAL_RETENTION_DAYS = 30
+REMINDER_RETENTION_DAYS = 30
 JOURNAL_RETENTION_DAYS = 90
 
 
@@ -63,6 +65,18 @@ def delete_old_approvals(conn: sqlite3.Connection, now: datetime) -> int:
     cursor = conn.execute(
         "DELETE FROM pending_approvals WHERE status != 'pending' AND expires_at < ?",
         (_cutoff(now, APPROVAL_RETENTION_DAYS),),
+    )
+    conn.commit()
+    return cursor.rowcount
+
+
+def delete_old_reminders(conn: sqlite3.Connection, now: datetime) -> int:
+    """Deletes reminders that were sent or failed; pending ones are never touched."""
+    cutoff = _cutoff(now, REMINDER_RETENTION_DAYS)
+    cursor = conn.execute(
+        "DELETE FROM reminders WHERE (sent_at IS NOT NULL AND sent_at < ?) "
+        "OR (failed_at IS NOT NULL AND failed_at < ?)",
+        (cutoff, cutoff),
     )
     conn.commit()
     return cursor.rowcount
@@ -117,6 +131,7 @@ def run_maintenance(
     result = {
         "messages": delete_old_messages(conn, now),
         "approvals": delete_old_approvals(conn, now),
+        "reminders": delete_old_reminders(conn, now),
         "journal_lines": trim_journal(journal_path, now),
     }
     compact_database(conn)
@@ -136,9 +151,11 @@ def main() -> None:
     finally:
         conn.close()
     logger.info(
-        "Duomenų priežiūra baigta. Ištrinta žinučių: %d, patvirtinimų: %d, žurnalo eilučių: %d",
+        "Duomenų priežiūra baigta. Ištrinta žinučių: %d, patvirtinimų: %d, priminimų: %d, "
+        "žurnalo eilučių: %d",
         result["messages"],
         result["approvals"],
+        result["reminders"],
         result["journal_lines"],
     )
 

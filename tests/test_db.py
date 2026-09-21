@@ -21,9 +21,9 @@ def test_create_new_database(tmp_path: Path):
     conn = get_connection(db_file)
 
     try:
-        # Check user_version matches CURRENT_SCHEMA_VERSION (4)
+        # Check user_version matches CURRENT_SCHEMA_VERSION (5)
         assert get_user_version(conn) == CURRENT_SCHEMA_VERSION
-        assert get_user_version(conn) == 4
+        assert get_user_version(conn) == 5
 
         # Check WAL mode
         cursor = conn.cursor()
@@ -99,7 +99,7 @@ def test_reopen_existing_database(tmp_path: Path):
     # Open second time
     conn2 = get_connection(db_file)
     try:
-        assert get_user_version(conn2) == 4
+        assert get_user_version(conn2) == 5
         cursor = conn2.cursor()
         cursor.execute("SELECT user_id, role, content FROM messages WHERE user_id = 12345;")
         row = cursor.fetchone()
@@ -115,7 +115,7 @@ def test_user_version_retained(tmp_path: Path):
     db_file = tmp_path / "test.db"
     conn = get_connection(db_file)
     try:
-        assert get_user_version(conn) == 4
+        assert get_user_version(conn) == 5
     finally:
         conn.close()
 
@@ -167,7 +167,7 @@ def test_migration_v1_to_v3_preserves_data(tmp_path: Path):
     conn_upgraded = get_connection(db_file)
     try:
         # Schema version must now be 3
-        assert get_user_version(conn_upgraded) == 4
+        assert get_user_version(conn_upgraded) == 5
 
         # Existing v1 data is completely preserved
         msg = conn_upgraded.execute("SELECT * FROM messages WHERE user_id = 111;").fetchone()
@@ -248,7 +248,7 @@ def test_migration_v2_to_v3_preserves_data(tmp_path: Path):
     conn_upgraded = get_connection(db_file)
     try:
         # Schema version must now be 3
-        assert get_user_version(conn_upgraded) == 4
+        assert get_user_version(conn_upgraded) == 5
 
         # Existing v2 data is completely preserved
         assert conn_upgraded.execute("SELECT content FROM messages WHERE user_id = 222;").fetchone()["content"] == "Žinutė iš v2"

@@ -16,7 +16,7 @@ from agent.prompts import (
     user_limit_exceeded_message,
 )
 
-CURRENT_SCHEMA_VERSION = 4
+CURRENT_SCHEMA_VERSION = 5
 
 # Model pricing (USD per 1M tokens) and daily limits. These are the highest prices
 # llm.py lets OpenRouter pay, so the recorded cost is never below the real one.
@@ -87,6 +87,54 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
         conn.execute("PRAGMA user_version = 4;")
         conn.commit()
         version = 4
+
+    if version < 5:
+        _migrate_to_v5(conn)
+        conn.execute("PRAGMA user_version = 5;")
+        conn.commit()
+        version = 5
+
+
+def _migrate_to_v5(conn: sqlite3.Connection) -> None:
+    """Migration to schema version 5: reminders, notes, and notes_fts."""
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS reminders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        created_by INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        due_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        sent_at TEXT,
+        failed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders (sent_at, failed_at, due_at);
+    CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders (user_id);
+    CREATE INDEX IF NOT EXISTS idx_reminders_creator ON reminders (created_by);
+
+    CREATE TABLE IF NOT EXISTS notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_notes_user ON notes (user_id, created_at);
+    CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+        text,
+        content='notes',
+        content_rowid='id'
+    );
+    CREATE TRIGGER IF NOT EXISTS notes_ai AFTER INSERT ON notes BEGIN
+        INSERT INTO notes_fts(rowid, text) VALUES (new.id, new.text);
+    END;
+    CREATE TRIGGER IF NOT EXISTS notes_ad AFTER DELETE ON notes BEGIN
+        INSERT INTO notes_fts(notes_fts, rowid, text) VALUES('delete', old.id, old.text);
+    END;
+    CREATE TRIGGER IF NOT EXISTS notes_au AFTER UPDATE ON notes BEGIN
+        INSERT INTO notes_fts(notes_fts, rowid, text) VALUES('delete', old.id, old.text);
+        INSERT INTO notes_fts(rowid, text) VALUES (new.id, new.text);
+    END;
+    """)
 
 
 def _migrate_to_v4(conn: sqlite3.Connection) -> None:
