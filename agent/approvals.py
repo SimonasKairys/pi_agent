@@ -274,8 +274,11 @@ def enrich_arguments(
         enriched.setdefault("title", row["title"])
         enriched.setdefault("start", row["starts_at"])
 
+    # Users and guests are both emailed by Google, so both belong in the count.
     count = conn.execute(
-        "SELECT COUNT(*) AS c FROM event_attendees WHERE event_id = ?", (event_id,)
+        "SELECT (SELECT COUNT(*) FROM event_attendees WHERE event_id = ?) "
+        "+ (SELECT COUNT(*) FROM event_guests WHERE event_id = ?) AS c",
+        (event_id, event_id),
     ).fetchone()
     enriched["attendee_count"] = int(count["c"]) if count else 0
     return enriched

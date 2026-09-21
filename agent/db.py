@@ -16,7 +16,7 @@ from agent.prompts import (
     user_limit_exceeded_message,
 )
 
-CURRENT_SCHEMA_VERSION = 3
+CURRENT_SCHEMA_VERSION = 4
 
 # Pricing and limits from TASK.md "Sprendimai ir skaičiai"
 INPUT_TOKEN_PRICE_PER_M = 0.15
@@ -80,6 +80,24 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
         conn.execute("PRAGMA user_version = 3;")
         conn.commit()
         version = 3
+
+    if version < 4:
+        _migrate_to_v4(conn)
+        conn.execute("PRAGMA user_version = 4;")
+        conn.commit()
+        version = 4
+
+
+def _migrate_to_v4(conn: sqlite3.Connection) -> None:
+    """Migration to schema version 4: event_guests (invited people outside users.toml users)."""
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS event_guests (
+        event_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        PRIMARY KEY (event_id, name),
+        FOREIGN KEY (event_id) REFERENCES events (id) ON DELETE CASCADE
+    );
+    """)
 
 
 def _migrate_to_v3(conn: sqlite3.Connection) -> None:

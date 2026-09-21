@@ -20,7 +20,7 @@ from telegram.ext import (
     filters,
 )
 
-from agent.config import User, load_users
+from agent.config import User, load_guests, load_users
 from agent.context import add_message, build_context
 from agent.db import (
     check_daily_cost_limit,
@@ -355,6 +355,10 @@ async def _answer(
         all_users = [user]
 
     allowed_names = [u.name for u in all_users if u.telegram_id != user_id]
+    try:
+        allowed_names.extend(g.name for g in load_guests())
+    except Exception:
+        logger.exception("Klaida nuskaitant svečių sąrašą")
     user_facts = get_user_facts(conn, user_id)
     system_prompt = build_system_prompt(
         name=user.name,

@@ -124,6 +124,19 @@ email = "ruta@example.com"
 timezone = "Europe/Vilnius"
 role = "member"
 
+Svečiai (nebutini): zmones, kuriuos galima kviesti i kalendoriaus ivykius, bet kurie
+botu nesinaudoja (neturi telegram_id, prieigos prie boto negauna). Tame paciame faile:
+
+[[guest]]
+name = "Jonas"
+email = "jonas@example.org"
+
+Vardai privalo buti unikalus tarp vartotoju IR svecių. Agentas kviecia tik vartotojus ir
+svecius is saraso pagal varda; el. pasto adreso, kurio saraše nera, jis pridėti negali.
+Svecio pasalinus is failo, jo dalyvaujanciu ivykiu keisti nebegalima (kol nepasalinsite
+jo is ivykio arba nepridesite atgal), o naujai nekviesiamas.
+Duomenu baze: naujas lentele event_guests (schema v4), sukuriama automatiskai paleidus nauja koda.
+
 Apribokite teises (procesas skaito, bet perrasyti negali):
 	sudo chown root:piagent /etc/piagent/users.toml
 	sudo chmod 640 /etc/piagent/users.toml
@@ -275,7 +288,7 @@ Jei neveikia:
 	Persistent=true po ijungimo gali paleisti papildoma praleista paleidima (nekenksminga)
 -----------------------------------------------
 Duomenu bazes (SQLite) patikra: /home/piagent/data/agent.db
-Lenteles: messages, summaries, facts, events, event_attendees, pending_approvals, usage.
+Lenteles: messages, summaries, facts, events, event_attendees, event_guests, pending_approvals, usage.
 Naudokite -readonly ir sudo -u piagent; nekeiskite duomenu, kol botas veikia.
 	sudo apt install -y sqlite3
 	sudo -u piagent sqlite3 -readonly /home/piagent/data/agent.db ".tables"

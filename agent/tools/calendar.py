@@ -14,7 +14,13 @@ from datetime import datetime
 from functools import partial
 from typing import Any
 
-from agent.config import get_user_by_id, get_user_by_name
+from agent.config import (
+    ConfigError,
+    UnknownUserError,
+    get_guest_by_name,
+    get_user_by_id,
+    get_user_by_name,
+)
 from agent.db import check_daily_event_limit, get_connection, record_usage
 from agent.tools.registry import Tool
 
@@ -63,6 +69,38 @@ def _naive_local_iso(dt: datetime) -> str:
     Composio applies `timezone` to `start_datetime`, so an embedded offset would shift the event.
     """
     return dt.replace(tzinfo=None).isoformat()
+
+
+def _resolve_attendees(names: list[Any]) -> tuple[list[str], list[int], list[str]]:
+    """Maps attendee names to (emails, user telegram ids, guest names).
+
+    A name is looked up among users first, then among guests in users.toml. Anything
+    else is rejected: the model never supplies an email address itself.
+    """
+    emails: list[str] = []
+    user_ids: list[int] = []
+    guest_names: list[str] = []
+    for att_name in names:
+        clean_name = str(att_name).strip()
+        if not clean_name:
+            continue
+        try:
+            u = get_user_by_name(clean_name)
+        except Exception:
+            try:
+                g = get_guest_by_name(clean_name)
+            except UnknownUserError as e:
+                raise ValueError(
+                    f"Dalyvis '{clean_name}' neleidžiamas: galima kviesti tik registruotus vartotojus ir svečius iš sąrašo"
+                ) from e
+            except ConfigError as e:
+                raise ValueError(f"Klaidinga vartotojų konfigūracija: {e}") from e
+            emails.append(g.email)
+            guest_names.append(g.name)
+            continue
+        emails.append(u.email)
+        user_ids.append(u.telegram_id)
+    return emails, user_ids, guest_names
 
 
 def _format_event_time(
@@ -260,6 +298,13 @@ def list_events(
                         attendee_names.append(u.name)
                     except Exception:
                         pass
+                attendee_names.extend(
+                    gr["name"]
+                    for gr in conn.execute(
+                        "SELECT name FROM event_guests WHERE event_id = ? ORDER BY name",
+                        (local_event_id,),
+                    ).fetchall()
+                )
                 if attendee_names:
                     names_str = ", ".join(attendee_names)
                     matching_events.append(f"[{local_event_id}] {event_title}: {time_display} (dalyviai: {names_str})")
@@ -345,7 +390,7 @@ def create_event(
 ) -> str:
     """Creates a calendar event and sends invitations to authorized attendees.
 
-    Requires attendees to be recognized users in users.toml.
+    Requires attendees to be users or guests listed in users.toml.
     Enforces per-user daily event creation limits.
     Sets send_updates='all', guests_can_invite_others=False,
     guests_can_see_other_guests=False, and create_meeting_room=False.
@@ -364,21 +409,8 @@ def create_event(
         else:
             attendees = list(attendees)
 
-    # Validate attendees: each must exist in users.toml
-    attendee_emails: list[str] = []
-    attendee_user_ids: list[int] = []
-    for att_name in attendees:
-        clean_name = str(att_name).strip()
-        if not clean_name:
-            continue
-        try:
-            u = get_user_by_name(clean_name)
-        except Exception as e:
-            raise ValueError(
-                f"Dalyvis '{clean_name}' neleidžiamas: galima kviesti tik registruotus vartotojus"
-            ) from e
-        attendee_emails.append(u.email)
-        attendee_user_ids.append(u.telegram_id)
+    # Validate attendees: each must be a user or a guest listed in users.toml
+    attendee_emails, attendee_user_ids, attendee_guest_names = _resolve_attendees(attendees)
 
     dt_start = parse_date_input(start, timezone_name=timezone_str, is_end_of_day=False)
     dt_end = parse_date_input(end, timezone_name=timezone_str, is_end_of_day=False)
@@ -481,6 +513,12 @@ def create_event(
                 (local_event_id, att_uid),
             )
 
+        for guest_name in attendee_guest_names:
+            conn.execute(
+                "INSERT OR IGNORE INTO event_guests (event_id, name) VALUES (?, ?)",
+                (local_event_id, guest_name),
+            )
+
         record_usage(conn, user_id=user_id, cost_usd=0.0, events_created=1)
         conn.commit()
 
@@ -522,7 +560,7 @@ CREATE_EVENT_TOOL = Tool(
             "attendees": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Dalyvių vardai (iš leistinų vartotojų sąrašo, ne el. pašto adresai)",
+                "description": "Dalyvių vardai (iš leistinų vartotojų ir svečių sąrašo, ne el. pašto adresai)",
             },
             "description": {
                 "type": "string",
@@ -611,6 +649,7 @@ def update_event(
 
         update_db_attendees = False
         new_attendee_ids: list[int] = []
+        new_guest_names: list[str] = []
         attendee_emails: list[str] = []
 
         if attendees is None:
@@ -630,22 +669,26 @@ def update_event(
                         "todėl įvykio keisti negalima. Kreipkitės į administratorių."
                     ) from exc
                 attendee_emails.append(u.email)
+            guest_rows = conn.execute(
+                "SELECT name FROM event_guests WHERE event_id = ? ORDER BY name",
+                (event_id,),
+            ).fetchall()
+            for gr in guest_rows:
+                try:
+                    g = get_guest_by_name(gr["name"])
+                except UnknownUserError as exc:
+                    raise ValueError(
+                        f"Įvykio Nr. {event_id} svečio '{gr['name']}' nebėra sąraše, "
+                        "todėl įvykio keisti negalima. Kreipkitės į administratorių."
+                    ) from exc
+                except ConfigError as exc:
+                    raise ValueError(f"Klaidinga vartotojų konfigūracija: {exc}") from exc
+                attendee_emails.append(g.email)
         else:
             update_db_attendees = True
             if not isinstance(attendees, list):
                 attendees = [attendees] if isinstance(attendees, str) else list(attendees)
-            for att_name in attendees:
-                clean_name = str(att_name).strip()
-                if not clean_name:
-                    continue
-                try:
-                    u = get_user_by_name(clean_name)
-                except Exception as e:
-                    raise ValueError(
-                        f"Dalyvis '{clean_name}' neleidžiamas: galima kviesti tik registruotus vartotojus"
-                    ) from e
-                attendee_emails.append(u.email)
-                new_attendee_ids.append(u.telegram_id)
+            attendee_emails, new_attendee_ids, new_guest_names = _resolve_attendees(attendees)
 
         start_iso = None
         if start is not None and start.strip():
@@ -729,10 +772,16 @@ def update_event(
 
         if update_db_attendees:
             conn.execute("DELETE FROM event_attendees WHERE event_id = ?", (event_id,))
+            conn.execute("DELETE FROM event_guests WHERE event_id = ?", (event_id,))
             for att_uid in new_attendee_ids:
                 conn.execute(
                     "INSERT OR IGNORE INTO event_attendees (event_id, user_id) VALUES (?, ?)",
                     (event_id, att_uid),
+                )
+            for guest_name in new_guest_names:
+                conn.execute(
+                    "INSERT OR IGNORE INTO event_guests (event_id, name) VALUES (?, ?)",
+                    (event_id, guest_name),
                 )
 
         conn.commit()

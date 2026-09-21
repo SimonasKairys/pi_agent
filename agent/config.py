@@ -33,6 +33,14 @@ class User:
     role: str = "member"
 
 
+@dataclass(frozen=True)
+class Guest:
+    """An external person that events may invite. Guests have no bot access."""
+
+    name: str
+    email: str
+
+
 def get_users_file_path() -> Path:
     """Returns the path to users.toml configuration file."""
     return Path(os.environ.get("PIAGENT_USERS_FILE", DEFAULT_USERS_FILE))
@@ -129,6 +137,53 @@ def load_users(file_path: str | Path | None = None) -> list[User]:
     return users
 
 
+def load_guests(file_path: str | Path | None = None) -> list[Guest]:
+    """Loads and validates the [[guest]] entries from users.toml.
+
+    Guests can only be invited to events; they are not users of the bot.
+    Raises ConfigError if the file is malformed, an entry lacks a name or an
+    email with '@', or a name repeats or clashes with a [[user]] name (the model
+    refers to people by name, so names must be unambiguous).
+    """
+    path = Path(file_path) if file_path is not None else get_users_file_path()
+    if not path.exists():
+        raise ConfigError(f"Users configuration file not found: {path}")
+
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+    except Exception as e:
+        raise ConfigError(f"Failed to parse TOML configuration from {path}: {e}") from e
+
+    entries = data.get("guest")
+    if entries is None:
+        entries = data.get("guests", [])
+    if not isinstance(entries, list):
+        raise ConfigError(f"Expected [[guest]] table array in {path}, got {type(entries).__name__}")
+
+    taken = {u.name.lower() for u in load_users(file_path=path)}
+    guests: list[Guest] = []
+    for idx, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise ConfigError(f"Guest entry #{idx + 1} is not a valid table")
+
+        name = entry.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ConfigError(f"Guest entry #{idx + 1} must have a non-empty string 'name'")
+        name = name.strip()
+        if name.lower() in taken:
+            raise ConfigError(f"Guest name '{name}' repeats another user or guest name")
+
+        email = entry.get("email")
+        if not isinstance(email, str) or "@" not in email:
+            raise ConfigError(f"Guest entry '{name}' has invalid email: {email!r} (must contain '@')")
+
+        guests.append(Guest(name=name, email=email.strip()))
+        taken.add(name.lower())
+
+    return guests
+
+
 class UnknownUserError(ConfigError, KeyError):
     """Raised when looking up an unknown user name or email."""
     pass
@@ -197,6 +252,23 @@ def get_user_by_name(
             return u
 
     raise UnknownUserError(f"Vartotojas su vardu '{name}' nerastas")
+
+
+def get_guest_by_name(
+    name: str,
+    guests: list[Guest] | None = None,
+    file_path: str | Path | None = None,
+) -> Guest:
+    """Returns Guest object for given name (case-insensitive) or raises UnknownUserError."""
+    if guests is None:
+        guests = load_guests(file_path=file_path)
+
+    name_lower = name.strip().lower()
+    for g in guests:
+        if g.name.lower() == name_lower:
+            return g
+
+    raise UnknownUserError(f"Svečias su vardu '{name}' nerastas")
 
 
 def get_user_by_email(
