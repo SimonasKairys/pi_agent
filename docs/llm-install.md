@@ -372,7 +372,8 @@ Tell the user:
 - To update the bot later, run:
   `sudo -u piagent git -C /home/piagent/telegram-agent pull && sudo systemctl restart piagent`
 - To see the log, run: `sudo journalctl -u piagent -f`
-- In Telegram, `/islaidos` shows today's spending and the daily limits.
+- In Telegram, `/pagalba` lists what the bot can do, with examples, and `/islaidos` shows
+  today's spending and the daily limits.
 - Every user must send `/start` to the bot once. Otherwise reminders from other users cannot
   reach them.
 - "Primink ..." creates a reminder, and "Užsirašyk ..." saves a note.

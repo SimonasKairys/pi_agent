@@ -333,7 +333,9 @@ sudo systemctl stop piagent
 sudo piagent-unlock                  # po perkrovimo, jei naudojate šifruotą diską
 ```
 
-Telegram komandos: `/start` pasisveikina, o `/islaidos` parodo šiandienos išlaidas ir dienos ribas.
+Telegram komandos: `/start` pasisveikina, `/pagalba` parodo, ką botas moka, su pavyzdžiais, o
+`/islaidos` parodo šiandienos išlaidas ir dienos ribas. `/pagalba` ir `/islaidos` matomos ir
+Telegram komandų meniu (mygtukas **/**).
 
 Kiekvienas vartotojas turi bent kartą parašyti botui `/start`. Kitaip Telegram neleidžia botui
 pirmam atsiųsti žinutės, ir kitų sukurti priminimai tam vartotojui nepasieks. Kūrėjas tada gauna

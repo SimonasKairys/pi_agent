@@ -52,7 +52,9 @@ from agent.memory import extract_and_save_facts, get_user_facts
 from agent.prompts import (
     APPROVAL_EXPIRED_MESSAGE,
     APPROVAL_PENDING_MESSAGE,
+    BOT_COMMANDS,
     ERROR_MESSAGE,
+    HELP_MESSAGE,
     START_MESSAGE,
     UNAUTHORIZED_MESSAGE,
     build_system_prompt,
@@ -163,6 +165,29 @@ def get_authorized_user(telegram_id: int) -> User | None:
     except Exception:
         logger.exception("Klaida nuskaitant vartotojų sąrašą")
     return None
+
+
+async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles /pagalba: a fixed list of what the bot can do, without a model call."""
+    if update.effective_chat is None or update.effective_chat.type != "private":
+        return
+    if update.effective_user is None or update.message is None:
+        return
+
+    if get_authorized_user(update.effective_user.id) is None:
+        await update.message.reply_text(UNAUTHORIZED_MESSAGE)
+        return
+    await update.message.reply_text(HELP_MESSAGE)
+
+
+async def post_init(app: Application) -> None:
+    """Registers the command menu and starts the reminder loop."""
+    try:
+        await app.bot.set_my_commands(list(BOT_COMMANDS))
+    except Exception:
+        # The menu is a convenience; the bot must start even if Telegram refuses it.
+        logger.exception("Nepavyko užregistruoti komandų meniu")
+    await start_reminder_loop(app)
 
 
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -573,7 +598,7 @@ def create_application(
         Application.builder()
         .token(token)
         .concurrent_updates(CONCURRENT_UPDATES)
-        .post_init(start_reminder_loop)
+        .post_init(post_init)
         .post_shutdown(stop_reminder_loop)
         .build()
     )
@@ -586,6 +611,7 @@ def create_application(
 
     app.add_handler(CommandHandler("start", handle_start))
     app.add_handler(CommandHandler("islaidos", handle_costs))
+    app.add_handler(CommandHandler(["pagalba", "help"], handle_help))
     app.add_handler(
         CallbackQueryHandler(handle_approval_callback, pattern=r"^(approve|reject):\d+$")
     )

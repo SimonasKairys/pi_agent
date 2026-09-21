@@ -33,6 +33,16 @@ talks to users in Lithuanian.
 - **Backups**: an optional script encrypts the SQLite database with `gpg` and uploads it to
   Google Drive with 14-day retention.
 
+## Telegram commands
+
+| Command | What it does |
+|---|---|
+| `/start` | Greets the user |
+| `/pagalba` | Lists what the bot can do, with example requests |
+| `/islaidos` | Shows today's spending and the daily limits |
+
+Everything else is plain text: the bot understands requests such as "Primink rytoj 9 val. ...".
+
 ## Architecture
 
 | Path | Purpose |

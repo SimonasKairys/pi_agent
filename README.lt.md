@@ -34,6 +34,16 @@ pagalbininkas kalba lietuviškai.
 - **Atsarginės kopijos**: nebūtinas skriptas šifruoja SQLite duomenų bazę su `gpg` ir įkelia ją į
   Google Drive, kopijas saugodamas 14 dienų.
 
+## Telegram komandos
+
+| Komanda | Ką daro |
+|---|---|
+| `/start` | Pasisveikina |
+| `/pagalba` | Parodo, ką botas moka, su užklausų pavyzdžiais |
+| `/islaidos` | Parodo šiandienos išlaidas ir dienos ribas |
+
+Visa kita rašoma laisvu tekstu: botas supranta tokius prašymus kaip „Primink rytoj 9 val. ...“.
+
 ## Architektūra
 
 | Kelias | Paskirtis |

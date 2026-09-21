@@ -35,7 +35,44 @@ Jei ko nors nežinai arba trūksta duomenų, pasakyk tai tiesiai. Nespėliok lai
 dalyvių ar faktų."""
 
 # User-facing Lithuanian messages
-START_MESSAGE = "Sveiki! Aš esu jūsų asmeninis pagalbininkas. Kuo galiu padėti?"
+START_MESSAGE = (
+    "Sveiki! Aš esu jūsų asmeninis pagalbininkas. Kuo galiu padėti?\n"
+    "Parašykite /pagalba, ir parodysiu, ką moku."
+)
+HELP_MESSAGE = """Ką moku (rašykite laisvai, kaip žmogui):
+
+📅 Kalendorius
+• „Kas mano kalendoriuje šią savaitę?“
+• „Sukurk susitikimą su Rūta rytoj 15 val.“
+• „Perkelk susitikimą į 16 val.“, „Atšauk susitikimą“
+
+⏰ Priminimai
+• „Primink rytoj 9 val. paskambinti Jokūbui“
+• „Primink Rūtai penktadienį 18 val. atnešti raktus“
+• „Kokius turiu priminimus?“, „Atšauk priminimą 2“
+
+📝 Užrašai
+• „Užsirašyk: idėja straipsniui apie šifravimą“
+• „Ką buvau užsirašęs apie straipsnius?“
+• „Parodyk mano užrašus“, „Ištrink užrašą 3“
+
+🧠 Atmintis
+• „Prisimink, kad geriu kavą be cukraus“
+• „Ką apie mane žinai?“, „Pamiršk, kad …“
+
+🔎 Paieška internete
+• „Kokia rytoj orų prognozė Vilniuje?“
+
+Trynimas, keitimas ir priminimai kitiems patvirtinami mygtuku.
+
+Komandos:
+/pagalba – šis sąrašas
+/islaidos – šiandienos išlaidos ir dienos ribos"""
+# Shown in Telegram's command menu (the "/" button)
+BOT_COMMANDS = (
+    ("pagalba", "Ką moku ir kaip manęs paprašyti"),
+    ("islaidos", "Šiandienos išlaidos ir dienos ribos"),
+)
 UNAUTHORIZED_MESSAGE = "Atsiprašome, neturite prieigos prie šio boto."
 ERROR_MESSAGE = "Atsiprašome, įvyko klaida apdorojant jūsų užklausą. Pabandykite vėliau."
 # Templates: the limit itself lives in db.py, the wording lives here.
