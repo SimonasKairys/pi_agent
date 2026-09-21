@@ -57,6 +57,14 @@ def parse_date_input(
     return dt
 
 
+def _naive_local_iso(dt: datetime) -> str:
+    """Returns wall-clock time without UTC offset; the zone travels in the separate `timezone` argument.
+
+    Composio applies `timezone` to `start_datetime`, so an embedded offset would shift the event.
+    """
+    return dt.replace(tzinfo=None).isoformat()
+
+
 def _format_event_time(
     start_info: dict[str, Any] | None,
     end_info: dict[str, Any] | None,
@@ -412,8 +420,8 @@ def create_event(
             "calendar_id": "primary",
             "calendarId": "primary",
             "summary": title,
-            "start_datetime": dt_start.isoformat(),
-            "end_datetime": dt_end.isoformat(),
+            "start_datetime": _naive_local_iso(dt_start),
+            "end_datetime": _naive_local_iso(dt_end),
             "timezone": timezone_str,
             "attendees": attendee_emails,
             "description": description,
@@ -688,10 +696,12 @@ def update_event(
         if title is not None:
             arguments["summary"] = new_title
         if start_iso is not None:
-            arguments["start_datetime"] = start_iso
+            arguments["start_datetime"] = _naive_local_iso(dt_start)
+            arguments["timezone"] = timezone_str
             arguments["start"] = {"dateTime": start_iso}
         if end_iso is not None:
-            arguments["end_datetime"] = end_iso
+            arguments["end_datetime"] = _naive_local_iso(dt_end)
+            arguments["timezone"] = timezone_str
             arguments["end"] = {"dateTime": end_iso}
         if description is not None:
             arguments["description"] = description

@@ -100,7 +100,8 @@ def test_update_own_event_success(setup_db, test_users):
     assert args["event_id"] == "g_1"
     assert args["summary"] == "Naujas pavadinimas"
     assert args["send_updates"] == "all"
-    assert "2026-09-25T15:00:00" in args["start_datetime"]
+    assert args["start_datetime"] == "2026-09-25T15:00:00"
+    assert args["timezone"] == "Europe/Vilnius"
 
     # Verify DB update
     row = conn.execute("SELECT title, starts_at FROM events WHERE id = 1").fetchone()

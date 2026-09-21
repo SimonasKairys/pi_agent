@@ -91,6 +91,9 @@ def test_create_event_success(setup_db, test_users):
     args = fake_client.last_arguments
     assert args["summary"] == "Strateginis susitikimas"
     assert args["timezone"] == "Europe/Vilnius"
+    # Wall-clock time without offset: the zone is passed separately, else the event shifts by the UTC offset.
+    assert args["start_datetime"] == "2026-09-22T10:00:00"
+    assert args["end_datetime"] == "2026-09-22T11:00:00"
     assert args["attendees"] == ["ruta@example.com"]
     assert args["description"] == "Aptarsime Q4 tikslus"
 
