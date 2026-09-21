@@ -19,8 +19,9 @@ Komandas vykdykite po vieną.
 10. [Atnaujinimas](#atnaujinimas)
 11. [Teisių patikra](#teisių-patikra)
 12. [Naktinė konsolidacija](#naktinė-konsolidacija)
-13. [Duomenų bazės patikra](#duomenų-bazės-patikra)
-14. [Atsarginės kopijos](#atsarginės-kopijos)
+13. [Duomenų šifravimas (LUKS)](#duomenų-šifravimas-luks)
+14. [Duomenų bazės patikra](#duomenų-bazės-patikra)
+15. [Atsarginės kopijos](#atsarginės-kopijos)
 
 ## Serverio paruošimas
 
@@ -433,35 +434,201 @@ sudo journalctl -u piagent-consolidate.service -n 15 --no-pager
 
 `Persistent=true` po įjungimo gali paleisti papildomą praleistą paleidimą. Tai nekenksminga.
 
-## Duomenų bazės patikra
+## Duomenų šifravimas (LUKS)
 
-Duomenų bazė yra `/home/piagent/data/agent.db`. Lentelės: `messages`, `summaries`, `facts`,
-`events`, `event_attendees`, `event_guests`, `pending_approvals` ir `usage`.
+Šis skyrius nebūtinas, bet rekomenduojamas. Jis užšifruoja visą asmeninę informaciją: duomenų bazę
+(žinutes, faktus, įvykius), žurnalą ir `users.toml` (vardus, el. pašto adresus, Telegram ID).
+Duomenys laikomi šifruotame LUKS2 konteineryje (AES-256), o slaptažodį įvedate po kiekvieno
+perkrovimo. Kol slaptažodžio neįvedėte, botas neveikia, o pavogtoje SD kortelėje duomenų perskaityti
+neįmanoma.
 
-Naudokite `-readonly` ir `sudo -u piagent`. Nekeiskite duomenų, kol botas veikia.
+Konteineris yra failas, todėl SD kortelės skaidinių keisti nereikia.
+
+| Kas | Kelias po šifravimo |
+|---|---|
+| Duomenų bazė | `/home/piagent/data/db/agent.db` |
+| Žurnalas | `/home/piagent/data/logs/` |
+| Vartotojai | `/home/piagent/data/users.toml` |
+| Šifruotas konteineris | `/var/lib/piagent/data.luks` |
+
+Slaptažodį išsaugokite slaptažodžių tvarkyklėje: be jo duomenų atkurti neįmanoma.
+
+### 1. Sustabdykite botą
 
 ```bash
+sudo apt install -y cryptsetup
+sudo systemctl stop piagent piagent-consolidate.timer
+```
+
+Jei naudojate atsarginių kopijų laikmatį, sustabdykite ir jį.
+
+### 2. Sukurkite konteinerį
+
+Komanda `luksFormat` paprašys įrašyti `YES` didžiosiomis raidėmis ir du kartus įvesti slaptažodį.
+Dydis `2G` yra pakankamas daugeliui metų. Jį galite padidinti.
+
+```bash
+sudo install -d -m 700 /var/lib/piagent
+sudo fallocate -l 2G /var/lib/piagent/data.luks
+sudo cryptsetup luksFormat --type luks2 /var/lib/piagent/data.luks
+sudo cryptsetup open /var/lib/piagent/data.luks piagent-data
+sudo mkfs.ext4 -q /dev/mapper/piagent-data
+```
+
+### 3. Prijunkite ir paruoškite katalogus
+
+Senus duomenis pirmiausia pervadinkite, kad jie liktų, kol patikrinsite naują vietą:
+
+```bash
+sudo mv /home/piagent/data /home/piagent/data.plain
+sudo install -d -o root -g piagent -m 750 /home/piagent/data
+sudo mount /dev/mapper/piagent-data /home/piagent/data
+sudo chown root:piagent /home/piagent/data
+sudo chmod 750 /home/piagent/data
+sudo install -d -o piagent -g piagent -m 700 /home/piagent/data/db /home/piagent/data/logs
+```
+
+Viršutinis katalogas priklauso `root`, todėl botas negali pakeisti `users.toml`. Į `db/` ir `logs/`
+jis rašyti gali.
+
+### 4. Perkelkite duomenis
+
+```bash
+sudo -u piagent cp -a /home/piagent/data.plain/. /home/piagent/data/db/
+sudo test -d /home/piagent/logs && sudo -u piagent cp -a /home/piagent/logs/. /home/piagent/data/logs/
+sudo cp /etc/piagent/users.toml /home/piagent/data/users.toml
+sudo chown root:piagent /home/piagent/data/users.toml
+sudo chmod 640 /home/piagent/data/users.toml
+sudo ls -la /home/piagent/data /home/piagent/data/db
+```
+
+Sąraše turi būti `users.toml`, `db/agent.db` ir `logs/`.
+
+### 5. Nukreipkite botą į naujus kelius
+
+```bash
+sudo tee -a /etc/piagent/env > /dev/null <<'EOF'
+PIAGENT_DB_PATH=/home/piagent/data/db/agent.db
+PIAGENT_LOG_DIR=/home/piagent/data/logs
+PIAGENT_USERS_FILE=/home/piagent/data/users.toml
+EOF
+sudo cut -d= -f1 /etc/piagent/env
+```
+
+Jei naudojate atsarginių kopijų skriptą, į `/etc/piagent/backup.env` įrašykite tą patį
+`PIAGENT_DB_PATH`.
+
+### 6. Neleiskite botui startuoti be šifruoto disko
+
+Be šio žingsnio botas po perkrovimo sukurtų naują tuščią duomenų bazę nešifruotame diske.
+
+```bash
+for unit in piagent piagent-consolidate; do
+  sudo mkdir -p /etc/systemd/system/$unit.service.d
+  printf '[Unit]\nConditionPathIsMountPoint=/home/piagent/data\n' \
+    | sudo tee /etc/systemd/system/$unit.service.d/encrypted-data.conf > /dev/null
+done
+sudo systemctl daemon-reload
+```
+
+### 7. Atrakinimo komanda
+
+```bash
+sudo tee /usr/local/sbin/piagent-unlock > /dev/null <<'EOF'
+#!/bin/sh
+# Atrakina šifruotus boto duomenis ir paleidžia botą. Vykdoma po kiekvieno perkrovimo.
+set -e
+if ! mountpoint -q /home/piagent/data; then
+  cryptsetup open /var/lib/piagent/data.luks piagent-data
+  mount /dev/mapper/piagent-data /home/piagent/data
+fi
+systemctl start piagent piagent-consolidate.timer
+systemctl is-active piagent
+EOF
+sudo chmod 755 /usr/local/sbin/piagent-unlock
+```
+
+### 8. Paleiskite ir patikrinkite
+
+```bash
+sudo systemctl start piagent piagent-consolidate.timer
+sudo systemctl is-active piagent
+sudo -u piagent sqlite3 -readonly /home/piagent/data/db/agent.db "PRAGMA integrity_check;"
+```
+
+Turi būti `active` ir `ok`. Parašykite botui žinutę ir paklauskite, ką jis apie jus atsimena: atsakymas
+turi remtis senais faktais.
+
+Perkraukite Raspberry Pi ir patikrinkite, ar be slaptažodžio botas nestartuoja:
+
+```bash
+sudo reboot
+```
+
+Prisijungę iš naujo paleiskite:
+
+```bash
+systemctl is-active piagent
+sudo piagent-unlock
+```
+
+Pirmoji komanda turi išvesti `inactive`, o po slaptažodžio įvedimo `piagent-unlock` turi išvesti
+`active`.
+
+### 9. Ištrinkite nešifruotas kopijas
+
+Tai darykite tik įsitikinę, kad botas veikia su senais duomenimis.
+
+```bash
+sudo find /home/piagent/data.plain -type f -exec shred -u {} +
+sudo rm -r /home/piagent/data.plain
+sudo test -d /home/piagent/logs && sudo find /home/piagent/logs -type f -exec shred -u {} + && sudo rm -r /home/piagent/logs
+sudo shred -u /etc/piagent/users.toml
+```
+
+SD kortelėse `shred` negarantuoja, kad seni duomenys išnyks fiziškai, nes kortelės valdiklis
+įrašus paskirsto savaip. Jei kortelėje ilgai buvo jautrių duomenų, saugiausia sistemą perkelti į
+naują kortelę ir senąją sunaikinti.
+
+### Kas lieka nešifruota
+
+- `/etc/piagent/env`: API raktai, prieinami tik `root`.
+- `journalctl` žurnalas: jame gali pasitaikyti vartotojų vardų ir klaidų tekstų, bet ne žinučių
+  turinys.
+- Duomenys trečiųjų šalių serveriuose (OpenRouter, Composio, Google, Tavily).
+
+## Duomenų bazės patikra
+
+Duomenų bazė yra `/home/piagent/data/db/agent.db`, jei atlikote šifravimą, arba
+`/home/piagent/data/agent.db`, jei ne. Lentelės: `messages`, `summaries`, `facts`, `events`,
+`event_attendees`, `event_guests`, `pending_approvals` ir `usage`.
+
+Naudokite `-readonly` ir `sudo -u piagent`. Nekeiskite duomenų, kol botas veikia. Pirmiausia
+nustatykite kelią. Jei šifravimo neatlikote, naudokite `/home/piagent/data/agent.db`.
+
+```bash
+DB=/home/piagent/data/db/agent.db
 sudo apt install -y sqlite3
-sudo -u piagent sqlite3 -readonly /home/piagent/data/agent.db ".tables"
+sudo -u piagent sqlite3 -readonly "$DB" ".tables"
 ```
 
 Įrašų skaičius:
 
 ```bash
-sudo -u piagent sqlite3 -readonly /home/piagent/data/agent.db "SELECT 'messages', COUNT(*) FROM messages UNION ALL SELECT 'summaries', COUNT(*) FROM summaries UNION ALL SELECT 'facts', COUNT(*) FROM facts UNION ALL SELECT 'events', COUNT(*) FROM events UNION ALL SELECT 'usage', COUNT(*) FROM usage;"
+sudo -u piagent sqlite3 -readonly "$DB" "SELECT 'messages', COUNT(*) FROM messages UNION ALL SELECT 'summaries', COUNT(*) FROM summaries UNION ALL SELECT 'facts', COUNT(*) FROM facts UNION ALL SELECT 'events', COUNT(*) FROM events UNION ALL SELECT 'usage', COUNT(*) FROM usage;"
 ```
 
 Naujausi įrašai:
 
 ```bash
-sudo -u piagent sqlite3 -readonly -header -column /home/piagent/data/agent.db "SELECT * FROM messages ORDER BY rowid DESC LIMIT 5;"
-sudo -u piagent sqlite3 -readonly -header -column /home/piagent/data/agent.db "SELECT id, title, starts_at, deleted_at FROM events ORDER BY id DESC LIMIT 5;"
+sudo -u piagent sqlite3 -readonly -header -column "$DB" "SELECT * FROM messages ORDER BY rowid DESC LIMIT 5;"
+sudo -u piagent sqlite3 -readonly -header -column "$DB" "SELECT id, title, starts_at, deleted_at FROM events ORDER BY id DESC LIMIT 5;"
 ```
 
 Vientisumas. Turi būti `ok`:
 
 ```bash
-sudo -u piagent sqlite3 -readonly /home/piagent/data/agent.db "PRAGMA integrity_check;"
+sudo -u piagent sqlite3 -readonly "$DB" "PRAGMA integrity_check;"
 ```
 
 Parašykite botui žinutę ir pakartokite `messages` skaičiavimą: skaičius turi padidėti. Ištrintas
@@ -482,21 +649,25 @@ sudo -u piagent test -w /usr/local/lib/piagent-backup; echo "exit=$?"
 
 Jei matote `exit=0`, tam failui ar katalogui paleiskite `sudo chown root:root` ir `sudo chmod 755`.
 
+Šifruotame diske kopijavimas veikia tik tada, kai diskas atrakintas. Jei Raspberry Pi buvo perkrautas
+ir `piagent-unlock` dar nepaleistas, 03:30 kopija nepavyks.
+
 ### Rankinė kopija
 
 Kodo kopija yra GitHub. Joje nėra `/etc/piagent/env` (raktų), `/etc/systemd/system/piagent.service`
 ir `venv`: raktus saugokite slaptažodžių tvarkyklėje, o paslaugą ir `venv` atkurkite pagal šį gidą.
 
-Pilna kopija su duomenimis:
+Pilna duomenų kopija šifruojama `gpg`. Komanda paprašys du kartus įvesti kopijos slaptažodį:
 
 ```bash
-sudo tar czf ~/piagent-backup-$(date +%F).tar.gz -C /home/piagent telegram-agent
+sudo tar czf - -C /home/piagent data | gpg --symmetric --cipher-algo AES256 -o ~/piagent-backup-$(date +%F).tar.gz.gpg
 ```
 
 Savo kompiuteryje:
 
 ```bash
-scp your_username@your_hostname.local:~/piagent-backup-*.tar.gz .
+scp your_username@your_hostname.local:~/piagent-backup-*.tar.gz.gpg .
+gpg -d piagent-backup-DATA.tar.gz.gpg | tar xzf -
 ```
 
-Archyve gali būti asmeninių duomenų, todėl saugokite jį privačiai. Raktų archyve nėra.
+Vietoj `DATA` įrašykite kopijos datą.

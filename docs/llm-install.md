@@ -331,4 +331,5 @@ Tell the user:
 - To update the bot later, run:
   `sudo -u piagent git -C /home/piagent/telegram-agent pull && sudo systemctl restart piagent`
 - To see the log, run: `sudo journalctl -u piagent -f`
-- Backups are not set up. The full guide is in `docs/setup.md`.
+- Backups and data encryption are not set up. The full guide, including LUKS encryption of
+  personal data, is in `docs/setup.md`.
