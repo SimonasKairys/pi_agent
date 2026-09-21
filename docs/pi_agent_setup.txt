@@ -80,6 +80,21 @@ Kintamuju paaiskinimai:
 - COMPOSIO_API_KEY: Composio API raktas kalendoriaus irankiu vykdymui (su Tool execution: Write leidimu).
 - COMPOSIO_CONNECTED_ACCOUNT_ID: Composio prijungtos Google Calendar paskyros identifikatorius (formatas ca_...).
 
+Google Calendar prijungimas per Composio (app.composio.dev):
+	1. Prijunkite Google Calendar paskyra. Google sutikimo lange palikite pazymetus VISUS
+	   leidimus ir patvirtinkite pilna kalendoriaus leidima
+	   https://www.googleapis.com/auth/calendar (tik calendar.events nepakanka).
+	   Savo Google OAuth programai ta pati leidima pridekite prie sutikimo ekrano;
+	   testavimo rezime savo paskyra itraukite tarp test users.
+	2. Nukopijuokite prijungtos paskyros ID (ca_...) i COMPOSIO_CONNECTED_ACCOUNT_ID.
+	   Perjungus paskyra ID paprastai pasikeicia.
+	3. COMPOSIO_API_KEY turi turėti Tool execution: Write leidima.
+	4. Po env pakeitimo: sudo systemctl restart piagent
+Jei kalendorius atsako "insufficient authentication scopes" (ACCESS_TOKEN_SCOPE_INSUFFICIENT,
+method calendar.v3.Calendars.Get) -> per siaura Google leidimai: perjunkite paskyra
+Composio su pilnu leidimu ir atnaujinkite ID. Skaitymas gali veikti, o kurimas ne.
+Laikas: irankiai siuncia vietini laika be UTC poslinkio ir atskira zona (Europe/Vilnius);
+jei ivykis atsiranda 3 val. anksciau, patikrinkite, ar dedate naujausia koda (git pull).
 Apribokite teises:
 	sudo chown root:root /etc/piagent/env
 	sudo chmod 600 /etc/piagent/env
@@ -258,6 +273,22 @@ Jei neveikia:
 	bad unit file setting -> trukstamos sekcijos; patikra: sudo systemd-analyze verify /etc/systemd/system/piagent-consolidate.timer
 	Missing credentials -> truksta EnvironmentFile=/etc/piagent/env
 	Persistent=true po ijungimo gali paleisti papildoma praleista paleidima (nekenksminga)
+-----------------------------------------------
+Duomenu bazes (SQLite) patikra: /home/piagent/data/agent.db
+Lenteles: messages, summaries, facts, events, event_attendees, pending_approvals, usage.
+Naudokite -readonly ir sudo -u piagent; nekeiskite duomenu, kol botas veikia.
+	sudo apt install -y sqlite3
+	sudo -u piagent sqlite3 -readonly /home/piagent/data/agent.db ".tables"
+Irasu skaicius:
+	sudo -u piagent sqlite3 -readonly /home/piagent/data/agent.db "SELECT 'messages', COUNT(*) FROM messages UNION ALL SELECT 'summaries', COUNT(*) FROM summaries UNION ALL SELECT 'facts', COUNT(*) FROM facts UNION ALL SELECT 'events', COUNT(*) FROM events UNION ALL SELECT 'usage', COUNT(*) FROM usage;"
+Naujausi irasai:
+	sudo -u piagent sqlite3 -readonly -header -column /home/piagent/data/agent.db "SELECT * FROM messages ORDER BY rowid DESC LIMIT 5;"
+	sudo -u piagent sqlite3 -readonly -header -column /home/piagent/data/agent.db "SELECT id, title, starts_at, deleted_at FROM events ORDER BY id DESC LIMIT 5;"
+Vientisumas:
+	sudo -u piagent sqlite3 -readonly /home/piagent/data/agent.db "PRAGMA integrity_check;"
+(turi buti: ok)
+Patikra: parasykite botui zinute ir pakartokite messages skaiciavima: skaicius turi padideti.
+Istrintas ivykis lieka events lenteleje su uzpildytu deleted_at (minkstas trynimas).
 -----------------------------------------------
 Backup teisiu patikra (piagent negali skaityti raktu ir keisti kopijavimo skripto):
 	sudo -u piagent cat /etc/piagent/backup.env
