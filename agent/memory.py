@@ -18,7 +18,7 @@ from agent.db import RESET_TIMEZONE
 
 logger = logging.getLogger(__name__)
 
-# Limits from TASK.md "Sprendimai ir skaičiai" -> "Atmintis"
+# Memory limits
 IMPORTANCE_THRESHOLD = 7  # 7 out of 10
 MAX_USER_FACTS = 200
 

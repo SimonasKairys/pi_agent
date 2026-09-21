@@ -1,6 +1,6 @@
 """Web search tool using Tavily API for pi_agent.
 
-Adheres to limits from TASK.md "Sprendimai ir skaičiai":
+Limits:
 - Results count: 5
 - Single snippet length: 500 characters
 - Total block length: 3000 characters
@@ -18,7 +18,7 @@ from agent.tools.registry import Tool
 
 logger = logging.getLogger(__name__)
 
-# Constants from TASK.md "Sprendimai ir skaičiai" (Paieška)
+# Search limits
 TAVILY_API_URL = "https://api.tavily.com/search"
 MAX_SEARCH_RESULTS = 5
 MAX_SNIPPET_LENGTH = 500

@@ -1,0 +1,502 @@
+# Diegimas į Raspberry Pi
+
+Šis gidas aprašo diegimą nuo nulio į Ubuntu Server 24.04 (Raspberry Pi 5). Botas veikia
+kaip atskiras vartotojas `piagent` be `sudo` teisių, o jo prieigą riboja systemd.
+
+Komandas vykdykite po vieną.
+
+## Turinys
+
+1. [Serverio paruošimas](#serverio-paruošimas)
+2. [Vartotojas `piagent`](#vartotojas-piagent)
+3. [Projekto klonavimas](#projekto-klonavimas)
+4. [Python aplinka](#python-aplinka)
+5. [Slapti raktai](#slapti-raktai)
+6. [Google Calendar per Composio](#google-calendar-per-composio)
+7. [Vartotojai ir svečiai](#vartotojai-ir-svečiai)
+8. [systemd paslauga](#systemd-paslauga)
+9. [Paleidimas ir patikra](#paleidimas-ir-patikra)
+10. [Atnaujinimas](#atnaujinimas)
+11. [Teisių patikra](#teisių-patikra)
+12. [Naktinė konsolidacija](#naktinė-konsolidacija)
+13. [Duomenų bazės patikra](#duomenų-bazės-patikra)
+14. [Atsarginės kopijos](#atsarginės-kopijos)
+
+## Serverio paruošimas
+
+Prisijunkite prie serverio:
+
+```bash
+ssh your_username@your_hostname.local
+```
+
+Jei reikia, atnaujinkite sistemą ir perkraukite. Po perkrovimo prisijunkite iš naujo.
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo reboot
+```
+
+Įdiekite Git ir Python įrankius:
+
+```bash
+sudo apt install git python3-pip python3-venv -y
+```
+
+## Vartotojas `piagent`
+
+Sukurkite vartotoją be `sudo` teisių ir be slaptažodžio:
+
+```bash
+sudo adduser --disabled-password --gecos "" piagent
+sudo chmod 700 /home/piagent
+```
+
+Patikrinkite, kad išvestyje nėra žodžio `sudo`:
+
+```bash
+id piagent
+```
+
+## Projekto klonavimas
+
+Aplankas turi būti tuščias arba neegzistuoti. Jei jis jau yra, pirmiausia jį pervadinkite:
+
+```bash
+sudo -u piagent mv /home/piagent/telegram-agent /home/piagent/telegram-agent.old
+```
+
+### Vieša saugykla
+
+```bash
+sudo -u piagent git clone https://github.com/SimonasKairys/pi_agent.git /home/piagent/telegram-agent
+```
+
+### Privati saugykla (deploy key)
+
+Privačiai saugyklai reikia prieigos rakto, kuris leidžia tik skaityti:
+
+```bash
+sudo -u piagent mkdir -m 700 /home/piagent/.ssh
+sudo -u piagent ssh-keygen -t ed25519 -N "" -C "raspi-deploy-key" -f /home/piagent/.ssh/id_ed25519
+sudo cat /home/piagent/.ssh/id_ed25519.pub
+```
+
+1. Nukopijuokite visą eilutę (`ssh-ed25519 ... raspi-deploy-key`).
+2. Saugyklos puslapyje atidarykite **Settings** > **Deploy keys** ir spustelėkite **Add deploy key**.
+3. **Title** laukelyje įrašykite `raspi`, **Allow write access** nežymėkite ir spustelėkite **Add key**.
+
+Patikrinkite ryšį. Turi būti parašyta `You've successfully authenticated`.
+
+```bash
+sudo -u piagent ssh -o StrictHostKeyChecking=accept-new -T git@github.com
+```
+
+Privataus rakto (failo be `.pub`) niekur nesiųskite. Kurdami naują raktą, pavyzdžiui, po SD
+kortelės gedimo, senąjį ištrinkite tame pačiame GitHub puslapyje.
+
+Nuklonuokite projektą:
+
+```bash
+sudo -u piagent git clone git@github.com:SimonasKairys/pi_agent.git /home/piagent/telegram-agent
+```
+
+### Be `docs/` aplanko
+
+Kad `docs/` neatsirastų Raspberry Pi, nustatykite dalinį išskleidimą. Kiti failai ir nauji
+aplankai išskleidžiami kaip įprasta.
+
+```bash
+sudo -u piagent git -C /home/piagent/telegram-agent sparse-checkout set --no-cone '/*' '!/docs/'
+sudo -u piagent ls /home/piagent/telegram-agent
+```
+
+Nustatymas yra vietinis: klonuodami iš naujo, komandą pakartokite. Failai `.env` ir `dev/` į
+GitHub nekeliami.
+
+## Python aplinka
+
+Sukurkite virtualią aplinką:
+
+```bash
+sudo -u piagent python3 -m venv /home/piagent/telegram-agent/venv
+```
+
+Jei turite seną aplinką iš `telegram-agent.old`, galite ją perkelti ir `pip install` praleisti:
+
+```bash
+sudo -u piagent mv /home/piagent/telegram-agent.old/venv /home/piagent/telegram-agent/venv
+```
+
+Įdiekite bibliotekas iš `requirements.txt`:
+
+```bash
+sudo -u piagent /home/piagent/telegram-agent/venv/bin/pip install -r /home/piagent/telegram-agent/requirements.txt
+```
+
+## Slapti raktai
+
+Raktai laikomi ne projekto aplanke, o `root` priklausančiame faile `/etc/piagent/env`.
+
+| Kintamasis | Kur gauti |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | [@BotFather](https://t.me/BotFather), komanda `/newbot` |
+| `OPENROUTER_API_KEY` | [OpenRouter raktų puslapis](https://openrouter.ai/keys). Modelis: `deepseek/deepseek-v4.1-flash` |
+| `TAVILY_API_KEY` | [Tavily](https://tavily.com), paieškai internete |
+| `COMPOSIO_API_KEY` | [Composio](https://app.composio.dev), su **Tool execution: Write** leidimu |
+| `COMPOSIO_CONNECTED_ACCOUNT_ID` | Prijungtos Google Calendar paskyros ID (`ca_...`) |
+
+Sukurkite failą:
+
+```bash
+sudo mkdir -p /etc/piagent
+sudo nano /etc/piagent/env
+```
+
+Įklijuokite savo reikšmes be kabučių ir be tarpų aplink `=`:
+
+```ini
+OPENROUTER_API_KEY=jusu_openrouter_raktas
+TELEGRAM_BOT_TOKEN=jusu_telegram_tokenas
+TAVILY_API_KEY=jusu_tavily_raktas
+COMPOSIO_API_KEY=jusu_composio_raktas
+COMPOSIO_CONNECTED_ACCOUNT_ID=prijungtos_paskyros_id
+```
+
+Apribokite teises ir patikrinkite. Komanda rodo tik pavadinimus:
+
+```bash
+sudo chown root:root /etc/piagent/env
+sudo chmod 600 /etc/piagent/env
+sudo cut -d= -f1 /etc/piagent/env
+```
+
+## Google Calendar per Composio
+
+1. [Composio](https://app.composio.dev) prijunkite Google Calendar paskyrą. Google sutikimo lange
+   palikite pažymėtus visus leidimus ir patvirtinkite pilną kalendoriaus leidimą
+   `https://www.googleapis.com/auth/calendar`. Vien `calendar.events` nepakanka.
+   Jei naudojate savo Google OAuth programą, tą patį leidimą pridėkite prie sutikimo ekrano,
+   o testavimo režime savo paskyrą įtraukite į **Test users**.
+2. Prijungtos paskyros ID (`ca_...`) nukopijuokite į `COMPOSIO_CONNECTED_ACCOUNT_ID`.
+   Perjungus paskyrą, ID paprastai pasikeičia.
+3. `COMPOSIO_API_KEY` turi turėti **Tool execution: Write** leidimą.
+4. Pakeitę `/etc/piagent/env`, paleiskite `sudo systemctl restart piagent`.
+
+Jei kalendorius grąžina `insufficient authentication scopes` (`ACCESS_TOKEN_SCOPE_INSUFFICIENT`,
+`calendar.v3.Calendars.Get`), Google leidimai per siauri. Tokiu atveju skaitymas gali veikti, o
+kūrimas ne. Composio iš naujo prijunkite paskyrą su pilnu leidimu ir atnaujinkite ID.
+
+Įrankiai siunčia vietinį laiką be UTC poslinkio ir atskirą laiko zoną (`Europe/Vilnius`). Jei
+įvykis atsiranda 3 valandomis anksčiau, patikrinkite, ar įdiegtas naujausias kodas.
+
+## Vartotojai ir svečiai
+
+Botu gali naudotis tik vartotojai, išvardyti `/etc/piagent/users.toml`. Kiekvienas vartotojas turi
+vardą, el. pašto adresą ir laiko juostą. Savo Telegram ID sužinosite parašę botui
+[@userinfobot](https://t.me/userinfobot).
+
+```bash
+sudo nano /etc/piagent/users.toml
+```
+
+```toml
+[[user]]
+telegram_id = 111111111
+name = "Simonas"
+email = "vardas@example.com"
+timezone = "Europe/Vilnius"
+role = "admin"
+
+[[user]]
+telegram_id = 222222222
+name = "Ruta"
+email = "ruta@example.com"
+timezone = "Europe/Vilnius"
+role = "member"
+
+# Svečiai (nebūtini): juos galima kviesti į įvykius, bet botu jie naudotis negali.
+[[guest]]
+name = "Jonas"
+email = "jonas@example.org"
+```
+
+- Vardai turi būti unikalūs tarp vartotojų ir svečių, nes modelis dalyvius nurodo vardais.
+- Agentas kviečia tik žmones iš šio sąrašo. El. pašto adreso, kurio sąraše nėra, pridėti jis negali.
+- Pašalinus svečią iš failo, įvykių, kuriuose jis dalyvauja, keisti nebegalima, kol jo
+  nepašalinsite iš įvykio arba nepridėsite atgal.
+
+Apribokite teises, kad procesas galėtų failą skaityti, bet ne perrašyti:
+
+```bash
+sudo chown root:piagent /etc/piagent/users.toml
+sudo chmod 640 /etc/piagent/users.toml
+sudo systemctl restart piagent
+```
+
+Jei faile yra klaida (pasikartojantis vardas, neteisinga laiko juosta, el. paštas be `@`), botas
+nestartuoja ir priežastį įrašo į žurnalą:
+
+```bash
+sudo journalctl -u piagent -n 20 --no-pager
+```
+
+## systemd paslauga
+
+```bash
+sudo nano /etc/systemd/system/piagent.service
+```
+
+```ini
+[Unit]
+Description=Pi agent Telegram bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=piagent
+Group=piagent
+WorkingDirectory=/home/piagent/telegram-agent
+ExecStart=/home/piagent/telegram-agent/venv/bin/python bot.py
+EnvironmentFile=/etc/piagent/env
+Restart=on-failure
+RestartSec=5
+
+ProtectSystem=strict
+ReadWritePaths=/home/piagent
+ProtectHome=tmpfs
+BindPaths=/home/piagent
+InaccessiblePaths=/root /media /mnt /srv
+
+PrivateTmp=true
+PrivateDevices=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Patikrinkite failą. Jei komanda nieko neišveda, failas geras.
+
+```bash
+sudo systemd-analyze verify /etc/systemd/system/piagent.service
+```
+
+## Paleidimas ir patikra
+
+Paleiskite botą dabar ir po kiekvieno perkrovimo. Paskutinė komanda turi išvesti `active`.
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now piagent
+sudo systemctl is-active piagent
+```
+
+Parašykite botui Telegram `/start`, tada bet kokį klausimą.
+
+### Dažnos klaidos
+
+Žurnalą peržiūrėsite su `sudo journalctl -u piagent -n 50 --no-pager`.
+
+| Klaida | Priežastis |
+|---|---|
+| `KeyError 'OPENROUTER_API_KEY'` | Neteisingas `/etc/piagent/env` |
+| `No module named ...` | Pakartokite `pip install` |
+| `Permission denied (publickey)` klonuojant | Deploy key nepridėtas arba nukopijuotas ne visas |
+| `Conflict: terminated by other getUpdates` | Tas pats botas veikia kitur |
+
+### Kasdienės komandos
+
+```bash
+sudo systemctl status piagent --no-pager
+sudo journalctl -u piagent -f        # išėjimas: Ctrl+C
+sudo systemctl restart piagent       # po kodo ar env pakeitimų
+sudo systemctl stop piagent
+```
+
+## Atnaujinimas
+
+Išsiuntę pakeitimus į GitHub (`git push`), Raspberry Pi paleiskite:
+
+```bash
+sudo -u piagent git -C /home/piagent/telegram-agent pull
+sudo systemctl restart piagent
+sudo systemctl is-active piagent
+```
+
+Jei `pull` nepavyksta dėl vietinių pakeitimų, patikrinkite
+`sudo -u piagent git -C /home/piagent/telegram-agent status`.
+
+Kūrimo failus kompiuteryje laikykite `dev/` aplanke, nes jis į GitHub nekeliamas.
+
+## Teisių patikra
+
+Botas turi galėti rašyti tik į `/home/piagent`, o `sudo` jam neturi veikti:
+
+```bash
+sudo tee /tmp/piagent-test.sh > /dev/null <<-'EOF'
+echo "kas as: $(whoami)"
+touch /home/piagent/testas && echo "namai: PAVYKO" || echo "namai: NEPAVYKO"
+touch /etc/testas 2>/dev/null && echo "etc: PAVYKO (blogai)" || echo "etc: NEPAVYKO (gerai)"
+touch /usr/testas 2>/dev/null && echo "usr: PAVYKO (blogai)" || echo "usr: NEPAVYKO (gerai)"
+echo "namai: $(ls /home | tr '\n' ' ')"
+ls /media >/dev/null 2>&1 && echo "media: matoma" || echo "media: nepasiekiama (gerai)"
+sudo -n true 2>/dev/null && echo "sudo: VEIKIA (blogai)" || echo "sudo: neveikia (gerai)"
+rm -f /home/piagent/testas
+EOF
+sudo chmod 644 /tmp/piagent-test.sh
+sudo systemd-run --wait --pipe --uid=piagent -p ProtectSystem=strict -p ReadWritePaths=/home/piagent -p ProtectHome=tmpfs -p BindPaths=/home/piagent -p InaccessiblePaths="/root /media /mnt /srv" bash /tmp/piagent-test.sh
+sudo rm /tmp/piagent-test.sh
+```
+
+## Naktinė konsolidacija
+
+Konsolidacija veikia kaip atskira paslauga, ne boto dalis. Papildomus apribojimus
+(`ProtectSystem` ir kitus) galite nukopijuoti iš `systemctl cat piagent.service`. Failuose turi
+būti visos sekcijos, kitaip `systemctl` rodo `bad unit file setting` arba `no installation config`.
+
+Paslauga:
+
+```bash
+sudo systemctl edit --force --full piagent-consolidate.service
+```
+
+```ini
+[Unit]
+Description=Nightly memory consolidation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=piagent
+Group=piagent
+EnvironmentFile=/etc/piagent/env
+WorkingDirectory=/home/piagent/telegram-agent
+ExecStart=/home/piagent/telegram-agent/venv/bin/python -m agent.consolidate
+```
+
+Sekcijos `[Install]` nėra, nes paslaugą paleidžia laikmatis. `EnvironmentFile` būtinas: be jo
+matysite `OpenAIError "Missing credentials"`, nes Raspberry Pi `.env` failo nėra.
+
+Laikmatis:
+
+```bash
+sudo systemctl edit --force --full piagent-consolidate.timer
+```
+
+```ini
+[Unit]
+Description=Nightly memory consolidation timer
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 Europe/Vilnius
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+Konsolidacija vyksta 03:00, 30 minučių prieš atsarginę kopiją 03:30, kad įrašai patektų į tos
+nakties kopiją. Laikas nurodytas su zona, kitaip `OnCalendar` naudoja sistemos zoną.
+
+Įjunkite ir patikrinkite. Paskutinė komanda turi rodyti artimiausią 03:00 EEST arba EET.
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now piagent-consolidate.timer
+systemctl list-timers piagent-consolidate.timer
+```
+
+Paleiskite bandymą dabar. Pabaigoje turi būti `Naktine konsolidacija baigta`. Pranešimas
+`zinuciu nera` reiškia, kad per parą pokalbių nebuvo.
+
+```bash
+sudo systemctl start piagent-consolidate.service
+sudo journalctl -u piagent-consolidate.service -n 15 --no-pager
+```
+
+| Klaida | Priežastis |
+|---|---|
+| `Refusing to start, unit ... not loaded` | Nėra `.service` failo tuo pačiu pavadinimu |
+| `bad unit file setting` | Trūksta sekcijų. Patikra: `sudo systemd-analyze verify /etc/systemd/system/piagent-consolidate.timer` |
+| `Missing credentials` | Trūksta `EnvironmentFile=/etc/piagent/env` |
+
+`Persistent=true` po įjungimo gali paleisti papildomą praleistą paleidimą. Tai nekenksminga.
+
+## Duomenų bazės patikra
+
+Duomenų bazė yra `/home/piagent/data/agent.db`. Lentelės: `messages`, `summaries`, `facts`,
+`events`, `event_attendees`, `event_guests`, `pending_approvals` ir `usage`.
+
+Naudokite `-readonly` ir `sudo -u piagent`. Nekeiskite duomenų, kol botas veikia.
+
+```bash
+sudo apt install -y sqlite3
+sudo -u piagent sqlite3 -readonly /home/piagent/data/agent.db ".tables"
+```
+
+Įrašų skaičius:
+
+```bash
+sudo -u piagent sqlite3 -readonly /home/piagent/data/agent.db "SELECT 'messages', COUNT(*) FROM messages UNION ALL SELECT 'summaries', COUNT(*) FROM summaries UNION ALL SELECT 'facts', COUNT(*) FROM facts UNION ALL SELECT 'events', COUNT(*) FROM events UNION ALL SELECT 'usage', COUNT(*) FROM usage;"
+```
+
+Naujausi įrašai:
+
+```bash
+sudo -u piagent sqlite3 -readonly -header -column /home/piagent/data/agent.db "SELECT * FROM messages ORDER BY rowid DESC LIMIT 5;"
+sudo -u piagent sqlite3 -readonly -header -column /home/piagent/data/agent.db "SELECT id, title, starts_at, deleted_at FROM events ORDER BY id DESC LIMIT 5;"
+```
+
+Vientisumas. Turi būti `ok`:
+
+```bash
+sudo -u piagent sqlite3 -readonly /home/piagent/data/agent.db "PRAGMA integrity_check;"
+```
+
+Parašykite botui žinutę ir pakartokite `messages` skaičiavimą: skaičius turi padidėti. Ištrintas
+įvykis lieka `events` lentelėje su užpildytu `deleted_at` (minkštas trynimas).
+
+## Atsarginės kopijos
+
+### Kopijavimo teisių patikra
+
+`piagent` neturi galėti skaityti kopijavimo raktų ir keisti kopijavimo skripto. Pirmoji komanda
+turi grąžinti `Permission denied`, o kitos dvi `exit=1`:
+
+```bash
+sudo -u piagent cat /etc/piagent/backup.env
+sudo -u piagent test -w /usr/local/lib/piagent-backup/backup.py; echo "exit=$?"
+sudo -u piagent test -w /usr/local/lib/piagent-backup; echo "exit=$?"
+```
+
+Jei matote `exit=0`, tam failui ar katalogui paleiskite `sudo chown root:root` ir `sudo chmod 755`.
+
+### Rankinė kopija
+
+Kodo kopija yra GitHub. Joje nėra `/etc/piagent/env` (raktų), `/etc/systemd/system/piagent.service`
+ir `venv`: raktus saugokite slaptažodžių tvarkyklėje, o paslaugą ir `venv` atkurkite pagal šį gidą.
+
+Pilna kopija su duomenimis:
+
+```bash
+sudo tar czf ~/piagent-backup-$(date +%F).tar.gz -C /home/piagent telegram-agent
+```
+
+Savo kompiuteryje:
+
+```bash
+scp your_username@your_hostname.local:~/piagent-backup-*.tar.gz .
+```
+
+Archyve gali būti asmeninių duomenų, todėl saugokite jį privačiai. Raktų archyve nėra.

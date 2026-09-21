@@ -388,7 +388,7 @@ def test_loop_read_only_tool_uses_all_backoff_steps_then_gives_up():
         sleep_fn=spy_sleep,
     ))
 
-    # TASK.md: 3 kartojimai po pirmo bandymo, backoff 1 s, 2 s, 4 s.
+    # 3 kartojimai po pirmo bandymo, backoff 1 s, 2 s, 4 s.
     assert attempts["n"] == 4
     assert len(delays) == 3
     for step, actual in zip(BACKOFF_STEPS, delays):

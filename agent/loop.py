@@ -1,6 +1,6 @@
 """ReAct agent loop for pi_agent.
 
-Coordinates multi-step tool execution with strict limits from TASK.md:
+Coordinates multi-step tool execution with strict limits:
 - Max 10 iterations
 - Max 120s duration
 - Max 60 000 tokens per request across iterations
@@ -27,12 +27,12 @@ from agent.tools.registry import ToolRegistry, clean_tool_result
 
 logger = logging.getLogger(__name__)
 
-# Constants from TASK.md "Sprendimai ir skaičiai" (Ciklas)
+# Agent loop limits
 MAX_ITERATIONS = 10
 MAX_REQUEST_DURATION_SECONDS = 120.0
 MAX_TOTAL_TOKENS = 60_000
 TOOL_TIMEOUT_SECONDS = 30.0
-# TASK.md: "Kartojimai po klaidos | 3, backoff 1 s, 2 s, 4 s su atsitiktiniu priedu".
+# Retries after an error: backoff 1 s, 2 s, 4 s with random jitter.
 # Three retries after the first attempt, so four attempts and three backoff steps.
 MAX_RETRIES = 3
 MAX_ATTEMPTS = MAX_RETRIES + 1

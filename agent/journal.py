@@ -3,7 +3,7 @@
 Records run_id, user_id, tool_name, tokens, and cost_usd into a JSONL log file
 in the directory configured by PIAGENT_LOG_DIR.
 Scrubs API keys and email addresses (preventing '@' from appearing in email locations).
-Calculates cost from model usage per TASK.md rates.
+Calculates cost from model usage and token rates.
 """
 
 from __future__ import annotations

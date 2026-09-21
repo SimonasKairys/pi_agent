@@ -12,7 +12,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-# Constants from TASK.md "Sprendimai ir skaičiai"
+# Context window limits
 VERBATIM_MESSAGES_COUNT = 20
 SUMMARIZE_THRESHOLD = 40
 MAX_CONTEXT_TOKENS = 32_000
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def estimate_tokens(text: str) -> int:
-    """Estimates tokens using len(text) // 4 according to TASK.md."""
+    """Estimates tokens as len(text) // 4."""
     return len(text) // 4
 
 

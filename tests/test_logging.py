@@ -36,7 +36,7 @@ def test_record_journal_entry_basic(tmp_path: Path):
 
 
 def test_journal_entry_scrubs_email_addresses(tmp_path: Path):
-    """Test required by PLAN.md: recorded line must not contain '@' in email contexts."""
+    """Recorded line must not contain '@' in email contexts."""
     log_file = tmp_path / "email_test.jsonl"
     raw_query = "Surask informaciją apie vartotoją simonas@example.com arba test.user+tag@domain.co.uk"
 
@@ -84,7 +84,7 @@ def test_journal_entry_scrubs_api_keys(tmp_path: Path, monkeypatch: pytest.Monke
 
 def test_cost_calculated_from_usage(tmp_path: Path):
     log_file = tmp_path / "calc_test.jsonl"
-    # Rates from TASK.md: 0.15 USD / 1M prompt, 0.60 USD / 1M completion
+    # Rates: 0.15 USD / 1M prompt, 0.60 USD / 1M completion
     # 1000 prompt tokens = 0.00015
     # 500 completion tokens = 0.00030
     # Total cost = 0.00045 USD

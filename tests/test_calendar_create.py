@@ -97,7 +97,7 @@ def test_create_event_success(setup_db, test_users):
     assert args["attendees"] == ["ruta@example.com"]
     assert args["description"] == "Aptarsime Q4 tikslus"
 
-    # Verify four required parameters from TASK.md / PLAN.md
+    # Verify the four required parameters
     assert args.get("send_updates") == "all" or args.get("sendUpdates") == "all"
     assert args.get("guests_can_invite_others") is False
     assert args.get("guests_can_see_other_guests") is False

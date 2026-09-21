@@ -21,7 +21,7 @@ from agent.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
-# Constant from TASK.md "Sprendimai ir skaičiai" (Patvirtinimai)
+# Approval settings
 APPROVAL_EXPIRY_MINUTES = 15
 
 
@@ -32,7 +32,7 @@ def needs_approval(
 ) -> bool:
     """Determines whether a tool call requires user confirmation.
 
-    Rules from TASK.md:
+    Rules:
     1. update_event and delete_event always require approval.
     2. Any write tool (risk='destructive' or create/update/delete) requires
        approval if web search was performed during the execution.
@@ -234,7 +234,7 @@ async def execute_approved_action(
 ) -> str:
     """Executes confirmed tool holding the user lock.
 
-    get_lock_fn is required: TASK.md says an approved action runs under the same
+    get_lock_fn is required: an approved action runs under the same
     per-user lock as an ordinary request, so running without one must be
     impossible rather than merely discouraged.
     """

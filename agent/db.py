@@ -18,7 +18,7 @@ from agent.prompts import (
 
 CURRENT_SCHEMA_VERSION = 4
 
-# Pricing and limits from TASK.md "Sprendimai ir skaičiai"
+# Model pricing (USD per 1M tokens) and daily limits
 INPUT_TOKEN_PRICE_PER_M = 0.15
 OUTPUT_TOKEN_PRICE_PER_M = 0.60
 MAX_USER_DAILY_COST_USD = 1.00

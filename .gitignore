@@ -1,6 +1,9 @@
 # Slaptos reikšmės (Raspberry Pi naudoja /etc/piagent/env)
 .env
 
+# Vietinis vartotojų sąrašas su tikrais el. pašto adresais
+users.toml
+
 # Kūrimo failai: nekeliami į Raspberry Pi
 dev/
 

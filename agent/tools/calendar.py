@@ -26,7 +26,7 @@ from agent.tools.registry import Tool
 
 logger = logging.getLogger(__name__)
 
-# Constants from TASK.md "Sprendimai ir skaičiai" (Kalendorius)
+# Calendar limits
 MAX_LIST_EVENTS = 50
 MAX_INTERVAL_DAYS = 90
 MAX_DESCRIPTION_LENGTH = 2000

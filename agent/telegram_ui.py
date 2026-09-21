@@ -64,7 +64,7 @@ from agent.tools.calendar import (
 
 logger = logging.getLogger(__name__)
 
-# Constants from TASK.md "Sprendimai ir skaičiai"
+# Telegram UI limits
 SPLIT_LIMIT = 4000
 CONCURRENT_UPDATES = 8
 

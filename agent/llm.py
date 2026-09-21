@@ -12,7 +12,7 @@ from openai import AsyncOpenAI
 from agent.db import calculate_cost
 from agent.prompts import SUMMARY_SYSTEM_PROMPT, build_summary_prompt
 
-# Settings from TASK.md "Architektūra" and "Sprendimai ir skaičiai"
+# Model and request settings
 DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MAX_TOKENS = 1500
