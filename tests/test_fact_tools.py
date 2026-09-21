@@ -109,3 +109,21 @@ def test_extraction_prompt_raises_explicit_requests():
     assert "prisimink" in FACT_EXTRACTION_SYSTEM_PROMPT
     assert "svarba 9" in FACT_EXTRACTION_SYSTEM_PROMPT
     assert "pamiršti" in FACT_EXTRACTION_SYSTEM_PROMPT
+
+
+def test_duplicate_check_ignores_punctuation_case_and_markdown(conn):
+    assert save_fact(conn, USER_A, "Vartotojo vardas yra Simonas", importance=10) is not None
+    assert save_fact(conn, USER_A, "vartotojo vardas yra Simonas.", importance=9) is None
+    assert save_fact(conn, USER_A, "Vartotojo  vardas yra **Simonas**!", importance=9) is None
+    assert save_fact(conn, USER_A, "Vartotojui patinka Virginija", importance=9) is not None
+    assert save_fact(conn, USER_A, "Vartotojui patinka Virginija.", importance=9) is None
+    # Lithuanian letters are part of words, not punctuation.
+    assert save_fact(conn, USER_A, "Gyvena Šiauliuose", importance=8) is not None
+    assert save_fact(conn, USER_A, "Gyvena Siauliuose", importance=8) is not None
+
+    assert len(get_user_facts(conn, USER_A)) == 4
+
+
+def test_extraction_ignores_facts_recited_by_assistant():
+    assert "tik iš to, ką vartotojas pasakė" in FACT_EXTRACTION_SYSTEM_PROMPT
+    assert "pakartojo iš atminties" in FACT_EXTRACTION_SYSTEM_PROMPT

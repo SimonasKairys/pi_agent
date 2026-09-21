@@ -27,18 +27,26 @@ Tavo užduotis: išanalizuoti vartotojo ir asistento pokalbį ir išskirti ilgal
 
 Taisyklės:
 1. Išskirk tik faktus apie vartotoją (pvz. vardas, pomėgiai, įpročiai, kontaktai, taisyklės, nuostatos, gyvenamoji vieta).
-2. Neišskirk vienkartinių užklausų ar laikinų detalių (pvz., "vartotojas paklausė koks šiandien oras").
-3. Kiekvienam faktui priskirk svarbą sveikais skaičiais nuo 1 iki 10:
+2. Faktus imk tik iš to, ką vartotojas pasakė savo žinutėje. Asistento atsakymas skirtas tik kontekstui:
+   neišskirk faktų, kuriuos asistentas išvardijo ar pakartojo iš atminties.
+3. Neišskirk vienkartinių užklausų ar laikinų detalių (pvz., "vartotojas paklausė koks šiandien oras").
+4. Kiekvienam faktui priskirk svarbą sveikais skaičiais nuo 1 iki 10:
    - 1-6: laikina ar menkavertė detalė
    - 7-8: naudingas ilgalaikis faktas (pvz. gyvena Vilniuje, geria kavą be cukraus)
    - 9-10: esminis asmeninis faktas ar svarbi taisyklė (pvz. alergiškas riešutams, dirba programuotoju)
-4. Jei vartotojas aiškiai prašo ką nors prisiminti (pvz. "prisimink", "įsimink", "atsimink"),
+5. Jei vartotojas aiškiai prašo ką nors prisiminti (pvz. "prisimink", "įsimink", "atsimink"),
    išskirk tą faktą su svarba 9.
-5. Neišskirk prašymų ką nors pamiršti ir faktų apie pačią atmintį (pvz. "vartotojas paprašė pamiršti").
-6. Atsakymą pateik griežtai kaip JSON masyvą:
+6. Neišskirk prašymų ką nors pamiršti ir faktų apie pačią atmintį (pvz. "vartotojas paprašė pamiršti").
+7. Atsakymą pateik griežtai kaip JSON masyvą:
    [{"fact": "fakto tekstas", "importance": 8}]
    Jei tinkamų faktų nėra, grąžink tuščią masyvą: []
 """
+
+
+def _normalize_fact(text: str) -> str:
+    """Returns fact text without case, punctuation, or extra spaces, for duplicate checks."""
+    without_punctuation = re.sub(r"[^\w\s]|_", " ", text.casefold())
+    return " ".join(without_punctuation.split())
 
 
 def get_current_timestamp(tz_name: str = RESET_TIMEZONE) -> str:
@@ -59,7 +67,7 @@ def save_fact(
     """Saves a fact for a user if it meets importance and deduplication criteria.
 
     - Discards facts with importance < IMPORTANCE_THRESHOLD (7).
-    - Checks for duplicates (case-insensitive text match for the same user).
+    - Checks for duplicates for the same user, ignoring case, punctuation, and spacing.
     - If user fact capacity reaches max_facts (200), evicts the least important and oldest fact.
     - Strictly isolates facts by user_id.
 
@@ -78,14 +86,15 @@ def save_fact(
         )
         return None
 
-    # Check for duplicate for this user (supports full Unicode comparison e.g. Lithuanian Ė, Ą, etc.)
+    # Duplicate check for this user; \w keeps Lithuanian letters such as Ė and Ą
+    normalized = _normalize_fact(clean_fact)
     cursor = conn.cursor()
     cursor.execute(
         "SELECT id, fact FROM facts WHERE user_id = ?;",
         (user_id,),
     )
     for existing_row in cursor.fetchall():
-        if existing_row["fact"].strip().casefold() == clean_fact.casefold():
+        if _normalize_fact(existing_row["fact"]) == normalized:
             logger.debug("Dublikatas praleistas vartotojui %d: %s", user_id, clean_fact)
             return None
 
