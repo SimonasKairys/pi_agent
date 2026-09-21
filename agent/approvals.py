@@ -78,6 +78,17 @@ def create_pending_approval(
     return int(cursor.lastrowid)
 
 
+def _card_time(value: Any) -> str:
+    """Formats an ISO datetime as 'YYYY-MM-DD HH:MM'; returns other values unchanged."""
+    text = str(value)
+    if "T" not in text:
+        return text
+    try:
+        return datetime.fromisoformat(text).strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return text
+
+
 def format_approval_card(
     approval_id: int,
     tool_name: str,
@@ -102,8 +113,8 @@ def format_approval_card(
         lines.append(f"• **Įvykio numeris**: {arguments['event_id']}")
 
     if "start" in arguments:
-        end_str = f" - {arguments['end']}" if "end" in arguments else ""
-        lines.append(f"• **Laikas**: {arguments['start']}{end_str}")
+        end_str = f" - {_card_time(arguments['end'])}" if "end" in arguments else ""
+        lines.append(f"• **Laikas**: {_card_time(arguments['start'])}{end_str}")
 
     if "attendees" in arguments and isinstance(arguments["attendees"], list):
         count = len(arguments["attendees"])
@@ -233,7 +244,8 @@ async def execute_approved_action(
 
     lock = get_lock_fn(user_id)
     async with lock:
-        return await tool_registry.execute(tool_name, arguments)
+        # The result goes to the user, not the model: no untrusted-data envelope.
+        return await tool_registry.execute(tool_name, arguments, wrap=False)
 
 
 def enrich_arguments(

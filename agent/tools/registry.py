@@ -20,12 +20,15 @@ UNTRUSTED_TAG_OPEN = "<nepatikimi_duomenys"
 UNTRUSTED_TAG_CLOSE = "</nepatikimi_duomenys>"
 
 
-def clean_tool_result(raw_text: str, tool_name: str | None = None) -> str:
+def clean_tool_result(
+    raw_text: str, tool_name: str | None = None, wrap: bool = True
+) -> str:
     """Cleans a tool output before it reaches LLM context.
 
     1. Removes email addresses (ensuring no '@' remains in email contexts).
     2. Removes Google identifiers (event IDs, URLs).
-    3. Wraps the output in untrusted data markers.
+    3. Wraps the output in untrusted data markers (skipped with wrap=False for text
+       shown straight to the user, since the markers are for the model, not people).
     """
     cleaned = raw_text
 
@@ -54,6 +57,8 @@ def clean_tool_result(raw_text: str, tool_name: str | None = None) -> str:
     cleaned = re.sub(r"\S+@\S+", "[el. paštas pašalintas]", cleaned)
 
     # 3. Wrap in untrusted data markers
+    if not wrap:
+        return cleaned
     name_attr = f' irankis="{tool_name}"' if tool_name else ""
     return (
         f"{UNTRUSTED_TAG_OPEN}{name_attr}>\n"
@@ -117,12 +122,16 @@ class ToolRegistry:
         name: str,
         arguments: dict[str, Any],
         raise_on_error: bool = False,
+        wrap: bool = True,
     ) -> str:
-        """Executes a registered tool and returns sanitized output."""
+        """Executes a registered tool and returns sanitized output.
+
+        wrap=False omits the untrusted-data envelope for results sent to the user.
+        """
         tool = self._tools.get(name)
         if tool is None:
             raw_result = f"Klaida: įrankis '{name}' neegzistuoja."
-            return clean_tool_result(raw_result, tool_name=name)
+            return clean_tool_result(raw_result, tool_name=name, wrap=wrap)
 
         # The model writes these arguments, and a prompt injection can add its own.
         # Anything the schema does not declare is dropped: search_web, for example,
@@ -146,4 +155,4 @@ class ToolRegistry:
                 raise
             raw_result = f"Klaida vykdant įrankį '{name}': {e}"
 
-        return clean_tool_result(raw_result, tool_name=name)
+        return clean_tool_result(raw_result, tool_name=name, wrap=wrap)

@@ -223,6 +223,17 @@ def test_concurrent_update_race(setup_db):
     assert info is None
 
 
+def test_format_approval_card_drops_utc_offset():
+    text, _ = format_approval_card(
+        approval_id=1,
+        tool_name="delete_event",
+        arguments={"title": "kvietimas", "start": "2026-09-22T15:30:00+03:00"},
+    )
+    assert "**Laikas**: 2026-09-22 15:30" in text
+    assert "+03:00" not in text
+    assert "T15:30" not in text
+
+
 def test_format_approval_card():
     text, keyboard = format_approval_card(
         approval_id=42,
@@ -237,7 +248,7 @@ def test_format_approval_card():
 
     assert "Naujo įvykio sukūrimas" in text
     assert "Komandos planavimas" in text
-    assert "2026-09-25T10:00 - 2026-09-25T11:00" in text
+    assert "2026-09-25 10:00 - 2026-09-25 11:00" in text
     assert "Dalyvių skaičius" in text
     assert "2 (Ruta, Tomas)" in text
     assert str(APPROVAL_EXPIRY_MINUTES) in text
@@ -288,3 +299,6 @@ async def test_execute_approved_action_holds_lock():
     assert lock_fn_called is True
     assert executed is True
     assert "Ištrinta: 99" in res
+    # The approved result is shown to the user, so it must not carry the model-facing envelope.
+    assert "nepatikimi_duomenys" not in res
+    assert "PASTABA" not in res
