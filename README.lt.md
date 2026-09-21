@@ -23,6 +23,8 @@ pagalbininkas kalba lietuviškai.
   o administratorius mato ir kiekvieno vartotojo išlaidas.
 - **Apsauga nuo raginimo injekcijų**: įrankių rezultatai, kalendoriaus įvykių tekstas, paieškos
   rezultatai ir išsaugoti faktai laikomi duomenimis, ne nurodymais.
+- **Duomenų šifravimas**: nebūtina sąranka duomenų bazę, žurnalą ir `users.toml` laiko LUKS2
+  konteineryje, kurį po kiekvieno perkrovimo atrakinate slaptažodžiu.
 - **Atsarginės kopijos**: nebūtinas skriptas šifruoja SQLite duomenų bazę su `gpg` ir įkelia ją į
   Google Drive, kopijas saugodamas 14 dienų.
 
@@ -33,7 +35,7 @@ pagalbininkas kalba lietuviškai.
 | `bot.py` | Paleidimo taškas |
 | `agent/telegram_ui.py` | Telegram apdorojimas, patvirtinimo mygtukai ir žinučių skaidymas |
 | `agent/loop.py` | Įrankius kviečiantis agento ciklas su iteracijų, laiko, žetonų ir kartojimų ribomis |
-| `agent/llm.py` | [OpenRouter](https://openrouter.ai) klientas; numatytasis modelis `deepseek/deepseek-v4.1-flash` |
+| `agent/llm.py` | [OpenRouter](https://openrouter.ai) klientas; numatytasis modelis `deepseek/deepseek-v4.1-flash`, nukreipiamas į greičiausią tiekėją neviršijant kainos ribos |
 | `agent/tools/` | `search_web`, `list_events`, `create_event`, `update_event`, `delete_event`, `list_facts` ir `forget_fact` |
 | `agent/approvals.py` | Taisyklės, kuriems įrankių kvietimams reikia patvirtinimo |
 | `agent/context.py`, `agent/memory.py` | Konteksto valdymas, santraukos ir faktai apie vartotojus |

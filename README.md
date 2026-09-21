@@ -22,6 +22,8 @@ talks to users in Lithuanian.
   admins also see every user's spending.
 - **Prompt-injection defense**: tool results, calendar event text, search results, and stored
   facts are wrapped and treated as data, not instructions.
+- **Encryption at rest**: an optional setup keeps the database, logs, and `users.toml` in a LUKS2
+  container that you unlock with a passphrase after each reboot.
 - **Backups**: an optional script encrypts the SQLite database with `gpg` and uploads it to
   Google Drive with 14-day retention.
 
@@ -32,7 +34,7 @@ talks to users in Lithuanian.
 | `bot.py` | Entry point |
 | `agent/telegram_ui.py` | Telegram handlers, approval buttons, and message splitting |
 | `agent/loop.py` | Tool-calling agent loop with iteration, time, token, and retry limits |
-| `agent/llm.py` | [OpenRouter](https://openrouter.ai) client; default model `deepseek/deepseek-v4.1-flash` |
+| `agent/llm.py` | [OpenRouter](https://openrouter.ai) client; default model `deepseek/deepseek-v4.1-flash`, routed to the lowest-latency provider under a price cap |
 | `agent/tools/` | `search_web`, `list_events`, `create_event`, `update_event`, `delete_event`, `list_facts`, and `forget_fact` |
 | `agent/approvals.py` | Rules for which tool calls need user confirmation |
 | `agent/context.py`, `agent/memory.py` | Context window management, summaries, and user facts |

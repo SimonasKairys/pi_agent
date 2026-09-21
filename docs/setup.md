@@ -193,7 +193,9 @@ kūrimas ne. Composio iš naujo prijunkite paskyrą su pilnu leidimu ir atnaujin
 
 ## Vartotojai ir svečiai
 
-Botu gali naudotis tik vartotojai, išvardyti `/etc/piagent/users.toml`. Kiekvienas vartotojas turi
+Botu gali naudotis tik vartotojai, išvardyti `/etc/piagent/users.toml`. Jei atlikote
+[duomenų šifravimą](#duomenų-šifravimas-luks), failas yra `/home/piagent/data/users.toml`, todėl
+toliau esančiose komandose naudokite šį kelią. Kiekvienas vartotojas turi
 vardą, el. pašto adresą ir laiko juostą. Savo Telegram ID sužinosite parašę botui
 [@userinfobot](https://t.me/userinfobot).
 
@@ -322,11 +324,15 @@ sudo systemctl status piagent --no-pager
 sudo journalctl -u piagent -f        # išėjimas: Ctrl+C
 sudo systemctl restart piagent       # po kodo ar env pakeitimų
 sudo systemctl stop piagent
+sudo piagent-unlock                  # po perkrovimo, jei naudojate šifruotą diską
 ```
+
+Telegram komandos: `/start` pasisveikina, o `/islaidos` parodo šiandienos išlaidas ir dienos ribas.
 
 ## Atnaujinimas
 
-Išsiuntę pakeitimus į GitHub (`git push`), Raspberry Pi paleiskite:
+Išsiuntę pakeitimus į GitHub (`git push`), Raspberry Pi paleiskite toliau esančias komandas. Jei
+naudojate šifruotą diską ir Raspberry Pi buvo perkrautas, pirmiausia paleiskite `sudo piagent-unlock`.
 
 ```bash
 sudo -u piagent git -C /home/piagent/telegram-agent pull
