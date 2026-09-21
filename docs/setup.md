@@ -1,7 +1,12 @@
 # Diegimas į Raspberry Pi
 
-Šis gidas aprašo diegimą nuo nulio į Ubuntu Server 24.04 (Raspberry Pi 5). Botas veikia
+Šis gidas aprašo diegimą nuo nulio į Ubuntu Server 24.04 LTS (Raspberry Pi 5). Botas veikia
 kaip atskiras vartotojas `piagent` be `sudo` teisių, o jo prieigą riboja systemd.
+
+Rekomenduojame būtent Ubuntu Server 24.04 LTS (64 bitų): visos šio gido komandos išbandytos su juo.
+Sistemą į SD kortelę įrašykite su [Raspberry Pi Imager](https://www.raspberrypi.com/software/):
+**Choose OS** > **Other general-purpose OS** > **Ubuntu** > **Ubuntu Server 24.04 LTS (64-bit)**.
+Nustatymuose įjunkite SSH ir nurodykite vartotojo vardą, slaptažodį ir Wi-Fi.
 
 Komandas vykdykite po vieną.
 

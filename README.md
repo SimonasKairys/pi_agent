@@ -46,6 +46,10 @@ talks to users in Lithuanian.
 
 ## Requirements
 
+- Recommended: [Ubuntu Server 24.04 LTS](https://ubuntu.com/download/raspberry-pi) (64-bit) on a
+  Raspberry Pi 5. The deployment guide and the LLM install instructions are written and tested for
+  it: it ships Python 3.12, has no desktop to use memory, and gets security updates until 2029.
+  You can write it to the SD card with [Raspberry Pi Imager](https://www.raspberrypi.com/software/).
 - Python 3.11 or later
 - API keys for Telegram, OpenRouter, Tavily, and Composio
 - A Google Calendar account connected through Composio

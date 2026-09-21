@@ -47,6 +47,10 @@ pagalbininkas kalba lietuviškai.
 
 ## Reikalavimai
 
+- Rekomenduojama: [Ubuntu Server 24.04 LTS](https://ubuntu.com/download/raspberry-pi) (64 bitų)
+  Raspberry Pi 5. Diegimo gidas ir LLM diegimo instrukcija parašyti ir išbandyti būtent jai: joje yra
+  Python 3.12, nėra darbalaukio, kuris naudotų atmintį, o saugumo atnaujinimai teikiami iki 2029 m.
+  Į SD kortelę ją įrašysite su [Raspberry Pi Imager](https://www.raspberrypi.com/software/).
 - Python 3.11 arba naujesnis
 - Telegram, OpenRouter, Tavily ir Composio API raktai
 - Google Calendar paskyra, prijungta per Composio

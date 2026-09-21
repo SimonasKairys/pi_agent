@@ -2,6 +2,7 @@
 
 You are an AI assistant. You help a user install pi_agent on a Raspberry Pi.
 pi_agent is a Telegram bot. The bot replies to its users in Lithuanian.
+The recommended system is Ubuntu Server 24.04 LTS (64-bit). This guide is tested only on it.
 
 Read all rules first. Then do the steps in order, from Step 0 to Step 12.
 
@@ -49,8 +50,12 @@ cat /etc/os-release | grep PRETTY_NAME
 python3 --version
 ```
 
-**Expect:** `Ubuntu`, and Python `3.11` or higher.
-**If not:** stop. Tell the user that pi_agent needs Ubuntu and Python 3.11 or higher.
+**Expect:** `Ubuntu 24.04`, and Python `3.11` or higher.
+**If not:** stop. Tell the user:
+- This guide is tested only on Ubuntu Server 24.04 LTS (64-bit).
+- To install it, use Raspberry Pi Imager: **Choose OS** > **Other general-purpose OS** > **Ubuntu** >
+  **Ubuntu Server 24.04 LTS (64-bit)**. Turn on SSH in the settings.
+- After that, the user starts again from Step 0.
 
 ## Step 2: Install system packages
 
