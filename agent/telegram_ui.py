@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
 import uuid
 from typing import Any
 from telegram import BotCommandScopeChat, Update
@@ -59,6 +60,7 @@ from agent.i18n import format_usd, format_usd_precise, language_from_telegram
 from agent.i18n import t as tr
 from agent.tools.registry import ToolRegistry
 from agent.tools.search import SEARCH_TOOL
+from agent.tools.youtube import YOUTUBE_TOOL
 from agent.tools.calendar import (
     CREATE_EVENT_TOOL,
     DELETE_EVENT_TOOL,
@@ -342,9 +344,14 @@ def get_default_registry(
     user: User | None = None,
     composio_client: Any = None,
 ) -> ToolRegistry:
-    """Builds the default tool registry populated with search_web and calendar tools."""
+    """Builds the default tool registry populated with search, calendar, and user tools.
+
+    search_youtube is optional: it is registered only when YOUTUBE_API_KEY is set.
+    """
     registry = ToolRegistry()
     registry.register(SEARCH_TOOL)
+    if os.environ.get("YOUTUBE_API_KEY"):
+        registry.register(YOUTUBE_TOOL)
     if conn is not None and user is not None:
         registry.register(
             make_list_events_tool(

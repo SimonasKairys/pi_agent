@@ -12,9 +12,12 @@ talks to each user in Lithuanian (the default) or English, set per user in `user
   [Composio](https://composio.dev). Invite only people listed in `users.toml`, including guests
   who don't use the bot.
 - **Web search**: uses [Tavily](https://tavily.com) with capped result counts and snippet lengths.
+- **YouTube search** (optional): finds videos with the
+  [YouTube Data API](https://developers.google.com/youtube/v3) and returns titles, channels, dates,
+  and links. The tool is available only when `YOUTUBE_API_KEY` is set.
 - **Approvals**: `update_event`, `delete_event`, `forget_fact`, `delete_note`, `delete_reminder`, and
   reminders for other users always require a confirmation button in
-  Telegram. Any write after a web search also requires confirmation.
+  Telegram. Any write after a web or YouTube search also requires confirmation.
 - **Memory**: keeps recent messages verbatim, summarizes older history, stores important facts
   about each user, and consolidates them nightly. Users can ask what the bot remembers and ask
   it to forget a fact (`list_facts`, `forget_fact`).
@@ -56,7 +59,7 @@ Everything else is plain text: the bot understands requests such as "Primink ryt
 | `agent/telegram_ui.py` | Telegram handlers, approval buttons, and message splitting |
 | `agent/loop.py` | Tool-calling agent loop with iteration, time, token, and retry limits |
 | `agent/llm.py` | [OpenRouter](https://openrouter.ai) client; default model `deepseek/deepseek-v4.1-flash`, routed to the lowest-latency provider under a price cap |
-| `agent/tools/` | Web search, calendar, facts, notes, and reminder tools |
+| `agent/tools/` | Web search, YouTube search, calendar, facts, notes, and reminder tools |
 | `agent/reminders.py` | Background loop that sends due reminders every 30 seconds |
 | `agent/i18n.py` | User-facing texts in Lithuanian and English |
 | `agent/approvals.py` | Rules for which tool calls need user confirmation |
@@ -123,6 +126,7 @@ To let an AI assistant guide the installation, give it the
 | `TELEGRAM_BOT_TOKEN` | Yes | Bot token from [@BotFather](https://t.me/BotFather) |
 | `OPENROUTER_API_KEY` | Yes | OpenRouter API key |
 | `TAVILY_API_KEY` | Yes | Tavily API key for web search |
+| `YOUTUBE_API_KEY` | No | YouTube Data API v3 key for YouTube search. Without it, the bot has no YouTube tool. The free quota allows about 100 searches a day |
 | `COMPOSIO_API_KEY` | Yes | Composio API key with **Tool execution: Write** permission |
 | `COMPOSIO_CONNECTED_ACCOUNT_ID` | Yes | Connected Google Calendar account ID (`ca_...`) |
 | `PIAGENT_USERS_FILE` | No | Path to `users.toml`. Default: `/etc/piagent/users.toml` |

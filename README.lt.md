@@ -13,9 +13,12 @@ vartotoju pagalbininkas kalba lietuviškai (numatytoji kalba) arba angliškai, p
   botu nesinaudoja.
 - **Paieška internete**: naudoja [Tavily](https://tavily.com) su ribotu rezultatų skaičiumi ir
   ištraukų ilgiu.
+- **Paieška YouTube** (nebūtina): randa vaizdo įrašus per
+  [YouTube Data API](https://developers.google.com/youtube/v3) ir grąžina pavadinimus, kanalus, datas
+  ir nuorodas. Įrankis veikia tik nustačius `YOUTUBE_API_KEY`.
 - **Patvirtinimai**: `update_event`, `delete_event`, `forget_fact`, `delete_note`, `delete_reminder` ir
   priminimai kitiems vartotojams visada reikalauja patvirtinimo mygtuko
-  Telegram. Bet koks įrašymas po paieškos internete taip pat reikalauja patvirtinimo.
+  Telegram. Bet koks įrašymas po paieškos internete ar YouTube taip pat reikalauja patvirtinimo.
 - **Atmintis**: paskutines žinutes laiko pažodžiui, senesnę istoriją sutraukia, išsaugo svarbius
   faktus apie kiekvieną vartotoją ir kas naktį juos konsoliduoja. Vartotojas gali paklausti, ką
   botas apie jį atsimena, ir paprašyti pamiršti faktą (`list_facts`, `forget_fact`).
@@ -56,7 +59,7 @@ Visa kita rašoma laisvu tekstu: botas supranta tokius prašymus kaip „Primink
 | `agent/telegram_ui.py` | Telegram apdorojimas, patvirtinimo mygtukai ir žinučių skaidymas |
 | `agent/loop.py` | Įrankius kviečiantis agento ciklas su iteracijų, laiko, žetonų ir kartojimų ribomis |
 | `agent/llm.py` | [OpenRouter](https://openrouter.ai) klientas; numatytasis modelis `deepseek/deepseek-v4.1-flash`, nukreipiamas į greičiausią tiekėją neviršijant kainos ribos |
-| `agent/tools/` | Paieškos, kalendoriaus, faktų, užrašų ir priminimų įrankiai |
+| `agent/tools/` | Paieškos internete ir YouTube, kalendoriaus, faktų, užrašų ir priminimų įrankiai |
 | `agent/reminders.py` | Fono ciklas, kuris kas 30 s išsiunčia atėjusius priminimus |
 | `agent/i18n.py` | Vartotojui rodomi tekstai lietuvių ir anglų kalbomis |
 | `agent/approvals.py` | Taisyklės, kuriems įrankių kvietimams reikia patvirtinimo |
@@ -123,6 +126,7 @@ Jei norite, kad diegimą vestų AI asistentas, pateikite jam
 | `TELEGRAM_BOT_TOKEN` | Taip | Boto tokenas iš [@BotFather](https://t.me/BotFather) |
 | `OPENROUTER_API_KEY` | Taip | OpenRouter API raktas |
 | `TAVILY_API_KEY` | Taip | Tavily API raktas paieškai |
+| `YOUTUBE_API_KEY` | Ne | YouTube Data API v3 raktas paieškai YouTube. Be jo boto YouTube įrankis neveikia. Nemokama kvota leidžia apie 100 paieškų per dieną |
 | `COMPOSIO_API_KEY` | Taip | Composio API raktas su **Tool execution: Write** leidimu |
 | `COMPOSIO_CONNECTED_ACCOUNT_ID` | Taip | Prijungtos Google Calendar paskyros ID (`ca_...`) |
 | `PIAGENT_USERS_FILE` | Ne | Kelias iki `users.toml`. Numatytasis: `/etc/piagent/users.toml` |

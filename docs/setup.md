@@ -152,6 +152,7 @@ Raktai laikomi ne projekto aplanke, o `root` priklausančiame faile `/etc/piagen
 | `TAVILY_API_KEY` | [Tavily](https://tavily.com), paieškai internete |
 | `COMPOSIO_API_KEY` | [Composio](https://app.composio.dev), su **Tool execution: Write** leidimu |
 | `COMPOSIO_CONNECTED_ACCOUNT_ID` | Prijungtos Google Calendar paskyros ID (`ca_...`) |
+| `YOUTUBE_API_KEY` | Nebūtina. [Google Cloud Console](https://console.cloud.google.com/apis/library/youtube.googleapis.com): įjunkite **YouTube Data API v3** ir sukurkite API raktą. Be jo boto YouTube paieška neveikia |
 
 Sukurkite failą:
 
@@ -168,6 +169,8 @@ TELEGRAM_BOT_TOKEN=jusu_telegram_tokenas
 TAVILY_API_KEY=jusu_tavily_raktas
 COMPOSIO_API_KEY=jusu_composio_raktas
 COMPOSIO_CONNECTED_ACCOUNT_ID=prijungtos_paskyros_id
+# Nebūtina, YouTube paieškai:
+YOUTUBE_API_KEY=jusu_youtube_raktas
 ```
 
 Apribokite teises ir patikrinkite. Komanda rodo tik pavadinimus:

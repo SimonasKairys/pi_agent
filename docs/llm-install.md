@@ -134,6 +134,10 @@ Tell the user they need these five values. They keep the values private and do n
 Tell the user: when connecting Google Calendar in Composio, allow ALL permissions, including
 `https://www.googleapis.com/auth/calendar`.
 
+Optional sixth value: `YOUTUBE_API_KEY` lets the bot search YouTube. The user gets it at
+https://console.cloud.google.com: enable **YouTube Data API v3** and create an API key.
+Without it, the bot works but has no YouTube search.
+
 Ask the user: "Do you have all five values?" Wait until the user says yes.
 
 ## Step 7: Save the keys
@@ -151,7 +155,8 @@ sudo nano /etc/piagent/env
 ```
 
 Tell the user to type these five lines with their own values, with no spaces around `=` and no
-quotes, then save with Ctrl+O, Enter, and exit with Ctrl+X:
+quotes, then save with Ctrl+O, Enter, and exit with Ctrl+X. If the user has a YouTube key, they
+add a sixth line `YOUTUBE_API_KEY=` with that key:
 
 ```ini
 TELEGRAM_BOT_TOKEN=
@@ -175,7 +180,8 @@ sudo cut -d= -f1 /etc/piagent/env
 ```
 
 **Expect:** exactly these five names, one per line: `TELEGRAM_BOT_TOKEN`, `OPENROUTER_API_KEY`,
-`TAVILY_API_KEY`, `COMPOSIO_API_KEY`, `COMPOSIO_CONNECTED_ACCOUNT_ID`.
+`TAVILY_API_KEY`, `COMPOSIO_API_KEY`, `COMPOSIO_CONNECTED_ACCOUNT_ID`. A sixth line
+`YOUTUBE_API_KEY` is also correct.
 **If not:** tell the user which name is missing or misspelled. Go back to the start of Step 7.
 
 ## Step 8: List the bot users

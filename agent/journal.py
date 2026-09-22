@@ -84,6 +84,7 @@ def sanitize_text(text: str) -> str:
     for env_var in (
         "OPENROUTER_API_KEY",
         "TAVILY_API_KEY",
+        "YOUTUBE_API_KEY",
         "COMPOSIO_API_KEY",
         "TELEGRAM_BOT_TOKEN",
         "BACKUP_PASSPHRASE",

@@ -39,6 +39,9 @@ MAX_ATTEMPTS = MAX_RETRIES + 1
 BACKOFF_STEPS = [1.0, 2.0, 4.0]
 assert len(BACKOFF_STEPS) == MAX_RETRIES, "kiekvienam kartojimui reikia savo backoff pakopos"
 
+# Tools that bring internet content into the context: any write after them needs approval.
+INTERNET_TOOLS = ("search_web", "search_youtube")
+
 # Lithuanian limit messages
 ITERATION_LIMIT_MESSAGE = (
     "Atsiprašome, pasiekta užklausos iteracijų riba (10). Veiksmas buvo sustabdytas."
@@ -318,7 +321,7 @@ async def run_loop(
             except Exception as log_err:
                 logger.warning("Klaida rašant įrankio kvietimą į žurnalą: %s", log_err)
 
-            if name == "search_web":
+            if name in INTERNET_TOOLS:
                 naudotas_internetas = True
 
             tool = tool_registry.get(name)

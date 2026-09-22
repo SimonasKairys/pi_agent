@@ -48,6 +48,7 @@ MESSAGES: dict[str, dict[str, str]] = {
 
 🔎 Paieška internete
 • „Kokia rytoj orų prognozė Vilniuje?“
+• „Rask YouTube vaizdo įrašą, kaip pakeisti dviračio padangą“
 
 Trynimas, keitimas ir priminimai kitiems patvirtinami mygtuku.
 
@@ -170,6 +171,7 @@ Komandos:
 
 🔎 Web search
 • "What's the weather forecast for Vilnius tomorrow?"
+• "Find a YouTube video on how to change a bike tire"
 
 Deleting, changing, and reminders for others are confirmed with a button.
 
