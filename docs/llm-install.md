@@ -94,7 +94,7 @@ sudo -u piagent test -e /home/piagent/telegram-agent && echo EXISTS || echo FREE
 **If not:** you see `EXISTS`. Run this, then continue:
 
 ```bash
-sudo -u piagent mv /home/piagent/telegram-agent /home/piagent/telegram-agent.old
+sudo systemctl stop piagent 2>/dev/null; sudo -u piagent mv /home/piagent/telegram-agent /home/piagent/telegram-agent.old
 ```
 
 Run:
@@ -219,50 +219,16 @@ sudo cat /etc/piagent/users.toml
 
 ## Step 9: Create the service
 
-Run:
+The service files are in the project folder `deploy/`. This step installs all of them: the bot,
+the nightly memory job, and the weekly maintenance job. Run:
 
 ```bash
-sudo tee /etc/systemd/system/piagent.service > /dev/null <<'EOF'
-[Unit]
-Description=Pi agent Telegram bot
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-User=piagent
-Group=piagent
-WorkingDirectory=/home/piagent/telegram-agent
-ExecStart=/home/piagent/telegram-agent/venv/bin/python bot.py
-EnvironmentFile=/etc/piagent/env
-Restart=on-failure
-RestartSec=5
-
-ProtectSystem=strict
-ReadWritePaths=/home/piagent
-ProtectHome=tmpfs
-BindPaths=/home/piagent
-InaccessiblePaths=/root /media /mnt /srv
-
-PrivateTmp=true
-PrivateDevices=true
-ProtectProc=invisible
-ProcSubset=pid
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-NoNewPrivileges=true
-CapabilityBoundingSet=
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-RestrictSUIDSGID=true
-UMask=0077
-
-[Install]
-WantedBy=multi-user.target
-EOF
-sudo systemd-analyze verify /etc/systemd/system/piagent.service
+sudo install -m 644 -t /etc/systemd/system /home/piagent/telegram-agent/deploy/piagent*.service /home/piagent/telegram-agent/deploy/piagent*.timer
+sudo systemd-analyze verify /etc/systemd/system/piagent*.service /etc/systemd/system/piagent*.timer
 ```
 
 **Expect:** no output from the last command.
+**If not:** if you see `No such file`, the code is missing. Go back to Step 4.
 
 ## Step 10: Start the bot
 
@@ -301,34 +267,9 @@ Ask the user: "Did the bot reply?"
 
 ## Step 12: Nightly memory job
 
-Run:
+Step 9 installed this job. Run:
 
 ```bash
-sudo tee /etc/systemd/system/piagent-consolidate.service > /dev/null <<'EOF'
-[Unit]
-Description=Nightly memory consolidation
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-User=piagent
-Group=piagent
-EnvironmentFile=/etc/piagent/env
-WorkingDirectory=/home/piagent/telegram-agent
-ExecStart=/home/piagent/telegram-agent/venv/bin/python -m agent.consolidate
-EOF
-sudo tee /etc/systemd/system/piagent-consolidate.timer > /dev/null <<'EOF'
-[Unit]
-Description=Nightly memory consolidation timer
-
-[Timer]
-OnCalendar=*-*-* 03:00:00 Europe/Vilnius
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-EOF
 sudo systemctl daemon-reload
 sudo systemctl enable --now piagent-consolidate.timer
 systemctl list-timers piagent-consolidate.timer
@@ -339,33 +280,9 @@ systemctl list-timers piagent-consolidate.timer
 ## Step 13: Weekly maintenance job
 
 This job deletes summarized messages older than 120 days and old log lines, then compacts the
-database. Run:
+database. Step 9 installed it. Run:
 
 ```bash
-sudo tee /etc/systemd/system/piagent-maintenance.service > /dev/null <<'EOF'
-[Unit]
-Description=Weekly database and log maintenance
-
-[Service]
-Type=oneshot
-User=piagent
-Group=piagent
-EnvironmentFile=/etc/piagent/env
-WorkingDirectory=/home/piagent/telegram-agent
-ExecStart=/home/piagent/telegram-agent/venv/bin/python -m agent.maintenance
-EOF
-sudo tee /etc/systemd/system/piagent-maintenance.timer > /dev/null <<'EOF'
-[Unit]
-Description=Weekly database and log maintenance timer
-
-[Timer]
-OnCalendar=Sun *-*-* 03:15:00 Europe/Vilnius
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-EOF
-sudo systemctl daemon-reload
 sudo systemctl enable --now piagent-maintenance.timer
 systemctl list-timers piagent-maintenance.timer
 ```
@@ -378,7 +295,9 @@ Tell the user:
 
 - The bot is installed and starts automatically after a reboot.
 - To update the bot later, run:
-  `sudo -u piagent git -C /home/piagent/telegram-agent pull && sudo systemctl restart piagent`
+  `sudo -u piagent git -C /home/piagent/telegram-agent pull && sudo systemctl restart piagent`.
+  If the `pull` output lists `deploy/` or `requirements.txt`, follow the "Atnaujinimas" part of
+  `docs/setup.md` instead.
 - To see the log, run: `sudo journalctl -u piagent -f`
 - In Telegram, `/pagalba` (or `/help`) lists what the bot can do, with examples, and `/islaidos`
   (or `/costs`) shows today's spending and the daily limits.

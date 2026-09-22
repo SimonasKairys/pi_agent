@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly database and log maintenance timer
+
+[Timer]
+OnCalendar=Sun *-*-* 03:15:00 Europe/Vilnius
+Persistent=true
+
+[Install]
+WantedBy=timers.target

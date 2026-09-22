@@ -69,6 +69,7 @@ Visa kita rašoma laisvu tekstu: botas supranta tokius prašymus kaip „Primink
 | `agent/db.py` | SQLite saugykla, naudojimo apskaita ir ribos |
 | `agent/journal.py` | JSONL žurnalas, iš kurio pašalinami API raktai ir el. pašto adresai |
 | `backup/` | Savarankiškas šifruotų kopijų skriptas |
+| `deploy/` | systemd paslaugų ir laikmačių failai Raspberry Pi |
 | `scripts/metrics.py` | Sėkmės, įrankių naudojimo ir išlaidų metrikos iš žurnalo |
 
 ## Reikalavimai

@@ -1,0 +1,35 @@
+[Unit]
+Description=Pi agent Telegram bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=piagent
+Group=piagent
+WorkingDirectory=/home/piagent/telegram-agent
+ExecStart=/home/piagent/telegram-agent/venv/bin/python bot.py
+EnvironmentFile=/etc/piagent/env
+Restart=on-failure
+RestartSec=5
+
+ProtectSystem=strict
+ReadWritePaths=/home/piagent
+ProtectHome=tmpfs
+BindPaths=/home/piagent
+InaccessiblePaths=/root /media /mnt /srv
+
+PrivateTmp=true
+PrivateDevices=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

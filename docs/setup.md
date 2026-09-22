@@ -21,10 +21,10 @@ Komandas vykdykite po vieną.
 7. [Vartotojai ir svečiai](#vartotojai-ir-svečiai)
 8. [systemd paslauga](#systemd-paslauga)
 9. [Paleidimas ir patikra](#paleidimas-ir-patikra)
-10. [Atnaujinimas](#atnaujinimas)
-11. [Teisių patikra](#teisių-patikra)
-12. [Naktinė konsolidacija](#naktinė-konsolidacija)
-13. [Savaitinė duomenų priežiūra](#savaitinė-duomenų-priežiūra)
+10. [Naktinė konsolidacija ir savaitinė priežiūra](#naktinė-konsolidacija-ir-savaitinė-priežiūra)
+11. [Atnaujinimas](#atnaujinimas)
+12. [Diegimas iš naujo](#diegimas-iš-naujo)
+13. [Teisių patikra](#teisių-patikra)
 14. [Duomenų šifravimas (LUKS)](#duomenų-šifravimas-luks)
 15. [Duomenų bazės patikra](#duomenų-bazės-patikra)
 16. [Atsarginės kopijos](#atsarginės-kopijos)
@@ -67,11 +67,8 @@ id piagent
 
 ## Projekto klonavimas
 
-Aplankas turi būti tuščias arba neegzistuoti. Jei jis jau yra, pirmiausia jį pervadinkite:
-
-```bash
-sudo -u piagent mv /home/piagent/telegram-agent /home/piagent/telegram-agent.old
-```
+Aplankas `/home/piagent/telegram-agent` dar neturi egzistuoti. Jei botą jau diegėte anksčiau,
+vietoj šio skyriaus atlikite [diegimą iš naujo](#diegimas-iš-naujo).
 
 ### Vieša saugykla
 
@@ -127,12 +124,6 @@ Sukurkite virtualią aplinką:
 
 ```bash
 sudo -u piagent python3 -m venv /home/piagent/telegram-agent/venv
-```
-
-Jei turite seną aplinką iš `telegram-agent.old`, galite ją perkelti ir `pip install` praleisti:
-
-```bash
-sudo -u piagent mv /home/piagent/telegram-agent.old/venv /home/piagent/telegram-agent/venv
 ```
 
 Įdiekite bibliotekas iš `requirements.txt`:
@@ -191,7 +182,7 @@ sudo cut -d= -f1 /etc/piagent/env
 2. Prijungtos paskyros ID (`ca_...`) nukopijuokite į `COMPOSIO_CONNECTED_ACCOUNT_ID`.
    Perjungus paskyrą, ID paprastai pasikeičia.
 3. `COMPOSIO_API_KEY` turi turėti **Tool execution: Write** leidimą.
-4. Pakeitę `/etc/piagent/env`, paleiskite `sudo systemctl restart piagent`.
+4. Jei botas jau veikia, pakeitę `/etc/piagent/env` paleiskite `sudo systemctl restart piagent`.
 
 Jei kalendorius grąžina `insufficient authentication scopes` (`ACCESS_TOKEN_SCOPE_INSUFFICIENT`,
 `calendar.v3.Calendars.Get`), Google leidimai per siauri. Tokiu atveju skaitymas gali veikti, o
@@ -248,8 +239,9 @@ Apribokite teises, kad procesas galėtų failą skaityti, bet ne perrašyti:
 ```bash
 sudo chown root:piagent /etc/piagent/users.toml
 sudo chmod 640 /etc/piagent/users.toml
-sudo systemctl restart piagent
 ```
+
+Jei botas jau veikia, pakeitę failą paleiskite `sudo systemctl restart piagent`.
 
 Jei faile yra klaida (pasikartojantis vardas, neteisinga laiko juosta, el. paštas be `@`), botas
 nestartuoja ir priežastį įrašo į žurnalą:
@@ -260,53 +252,18 @@ sudo journalctl -u piagent -n 20 --no-pager
 
 ## systemd paslauga
 
-```bash
-sudo nano /etc/systemd/system/piagent.service
-```
-
-```ini
-[Unit]
-Description=Pi agent Telegram bot
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-User=piagent
-Group=piagent
-WorkingDirectory=/home/piagent/telegram-agent
-ExecStart=/home/piagent/telegram-agent/venv/bin/python bot.py
-EnvironmentFile=/etc/piagent/env
-Restart=on-failure
-RestartSec=5
-
-ProtectSystem=strict
-ReadWritePaths=/home/piagent
-ProtectHome=tmpfs
-BindPaths=/home/piagent
-InaccessiblePaths=/root /media /mnt /srv
-
-PrivateTmp=true
-PrivateDevices=true
-ProtectProc=invisible
-ProcSubset=pid
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-NoNewPrivileges=true
-CapabilityBoundingSet=
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-RestrictSUIDSGID=true
-UMask=0077
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Patikrinkite failą. Jei komanda nieko neišveda, failas geras.
+Paslaugų failai yra projekto aplanke `deploy/`, todėl jų kopijuoti iš šio gido nereikia. Įdiekite
+juos visus iš karto: boto paslaugą, naktinę konsolidaciją ir savaitinę priežiūrą.
 
 ```bash
-sudo systemd-analyze verify /etc/systemd/system/piagent.service
+sudo install -m 644 -t /etc/systemd/system /home/piagent/telegram-agent/deploy/piagent*.service /home/piagent/telegram-agent/deploy/piagent*.timer
+sudo systemd-analyze verify /etc/systemd/system/piagent*.service /etc/systemd/system/piagent*.timer
 ```
+
+Jei antroji komanda nieko neišveda, failai geri.
+
+`install` failus nukopijuoja, o ne susieja. Susieti nevalia: projekto aplankas priklauso
+`piagent`, todėl botas galėtų perrašyti savo paslaugą ir panaikinti jos apribojimus.
 
 ## Paleidimas ir patikra
 
@@ -349,21 +306,145 @@ Kiekvienas vartotojas turi bent kartą parašyti botui `/start`. Kitaip Telegram
 pirmam atsiųsti žinutės, ir kitų sukurti priminimai tam vartotojui nepasieks. Kūrėjas tada gauna
 pranešimą, kad priminimo išsiųsti nepavyko.
 
+## Naktinė konsolidacija ir savaitinė priežiūra
+
+Abi užduotys veikia kaip atskiros paslaugos, ne boto dalis. Jų failus įdiegėte kartu su
+[systemd paslauga](#systemd-paslauga), todėl liko juos įjungti.
+
+Konsolidacija vyksta kas naktį 03:00, 30 minučių prieš atsarginę kopiją 03:30, kad įrašai patektų į
+tos nakties kopiją. Ji sutraukia senas žinutes į santraukas ir sutvarko faktus apie vartotojus.
+
+Kas sekmadienį 03:15, tarp konsolidacijos (03:00) ir atsarginės kopijos (03:30), paleidžiamas
+modulis `agent.maintenance`. Jis:
+
+1. Ištrina senesnes nei 120 dienų žinutes, bet tik tas, kurios jau sutrauktos į santrauką.
+   Nesutrauktos žinutės lieka bet kokio amžiaus, o faktai apie vartotoją netrinami.
+2. Ištrina užbaigtus patvirtinimus (patvirtintus, atmestus, pasibaigusius), senesnius nei 30 dienų.
+3. Ištrina išsiųstus ir neišsiųstus (nepasiekusius gavėjo) priminimus, senesnius nei 30 dienų.
+   Laukiantys priminimai ir užrašai netrinami.
+4. Iš žurnalo `journal.jsonl` pašalina senesnes nei 90 dienų eilutes.
+5. Suspaudžia duomenų bazę: `PRAGMA wal_checkpoint(TRUNCATE)`, `PRAGMA optimize` ir `VACUUM`.
+
+Pašalintų žinučių atkurti neįmanoma: botas jas atsimena tik iš santraukos ir faktų. Iki 14 dienų
+senumo duomenys dar yra atsarginėse kopijose.
+
+Laikas nurodytas su zona (`Europe/Vilnius`), kitaip `OnCalendar` naudoja sistemos zoną.
+
+Jei naudojate [šifruotą diską](#duomenų-šifravimas-luks), neleiskite priežiūrai veikti, kol diskas
+neatrakintas:
+
+```bash
+sudo mkdir -p /etc/systemd/system/piagent-maintenance.service.d
+printf '[Unit]\nConditionPathIsMountPoint=/home/piagent/data\n' \
+  | sudo tee /etc/systemd/system/piagent-maintenance.service.d/encrypted-data.conf > /dev/null
+```
+
+Įjunkite laikmačius. Paskutinė komanda turi rodyti artimiausią 03:00 ir artimiausią sekmadienį
+03:15 (EEST arba EET).
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now piagent-consolidate.timer piagent-maintenance.timer
+systemctl list-timers 'piagent-*'
+```
+
+Paleiskite konsolidacijos bandymą dabar. Pabaigoje turi būti `Naktine konsolidacija baigta`.
+Pranešimas `zinuciu nera` reiškia, kad per parą pokalbių nebuvo.
+
+```bash
+sudo systemctl start piagent-consolidate.service
+sudo journalctl -u piagent-consolidate.service -n 15 --no-pager
+```
+
+Paleiskite priežiūros bandymą. Pabaigoje turi būti `Duomenų priežiūra baigta` su ištrintų įrašų
+skaičiais.
+
+```bash
+sudo systemctl start piagent-maintenance.service
+sudo journalctl -u piagent-maintenance.service -n 10 --no-pager
+```
+
+| Klaida | Priežastis |
+|---|---|
+| `Refusing to start, unit ... not loaded` | Paslaugos failas neįdiegtas. Pakartokite [systemd paslaugos](#systemd-paslauga) `install` komandą |
+| `Missing credentials` | Paslaugos faile trūksta `EnvironmentFile=/etc/piagent/env` |
+
+`Persistent=true` po įjungimo gali paleisti papildomą praleistą paleidimą. Tai nekenksminga.
+
 ## Atnaujinimas
 
-Išsiuntę pakeitimus į GitHub (`git push`), Raspberry Pi paleiskite toliau esančias komandas. Jei
-naudojate šifruotą diską ir Raspberry Pi buvo perkrautas, pirmiausia paleiskite `sudo piagent-unlock`.
+Išsiuntę pakeitimus į GitHub (`git push`), Raspberry Pi parsisiųskite naują kodą. Jei naudojate
+šifruotą diską ir Raspberry Pi buvo perkrautas, pirmiausia paleiskite `sudo piagent-unlock`.
 
 ```bash
 sudo -u piagent git -C /home/piagent/telegram-agent pull
-sudo systemctl restart piagent
-sudo systemctl is-active piagent
 ```
 
 Jei `pull` nepavyksta dėl vietinių pakeitimų, patikrinkite
 `sudo -u piagent git -C /home/piagent/telegram-agent status`.
 
+Jei `pull` išvestyje matote `deploy/`, įdiekite naujus paslaugų failus:
+
+```bash
+sudo install -m 644 -t /etc/systemd/system /home/piagent/telegram-agent/deploy/piagent*.service /home/piagent/telegram-agent/deploy/piagent*.timer
+sudo systemctl daemon-reload
+```
+
+Jei matote `requirements.txt`, atnaujinkite bibliotekas:
+
+```bash
+sudo -u piagent /home/piagent/telegram-agent/venv/bin/python -m pip install -r /home/piagent/telegram-agent/requirements.txt
+```
+
+Paleiskite botą iš naujo. Paskutinė komanda turi išvesti `active`.
+
+```bash
+sudo systemctl restart piagent
+sudo systemctl is-active piagent
+```
+
 Kūrimo failus kompiuteryje laikykite `dev/` aplanke, nes jis į GitHub nekeliamas.
+
+## Diegimas iš naujo
+
+Šis skyrius skirtas, kai `/home/piagent/telegram-agent` jau yra, pavyzdžiui, kai norite švaraus
+kodo aplanko. Duomenys, raktai ir vartotojų sąrašas lieka savo vietose, nes jie laikomi ne kodo
+aplanke.
+
+Sustabdykite botą ir pervadinkite seną aplanką:
+
+```bash
+sudo systemctl stop piagent
+sudo -u piagent mv /home/piagent/telegram-agent /home/piagent/telegram-agent.old
+```
+
+Nuklonuokite projektą, kaip aprašyta skyriuje [Projekto klonavimas](#projekto-klonavimas). Tada
+perkelkite seną Python aplinką, kad nereikėtų visko siųstis iš naujo, ir atnaujinkite bibliotekas:
+
+```bash
+sudo -u piagent mv /home/piagent/telegram-agent.old/venv /home/piagent/telegram-agent/venv
+sudo -u piagent /home/piagent/telegram-agent/venv/bin/python -m pip install -r /home/piagent/telegram-agent/requirements.txt
+```
+
+Čia naudojamas `python -m pip`, o ne `venv/bin/pip`: perkeltos aplinkos `pip` vis dar rodo į seną
+aplanką ir neveikia.
+
+Jei senos aplinkos nėra, ją sukurkite pagal skyrių [Python aplinka](#python-aplinka).
+
+Įdiekite paslaugų failus ir paleiskite botą:
+
+```bash
+sudo install -m 644 -t /etc/systemd/system /home/piagent/telegram-agent/deploy/piagent*.service /home/piagent/telegram-agent/deploy/piagent*.timer
+sudo systemctl daemon-reload
+sudo systemctl start piagent
+sudo systemctl is-active piagent
+```
+
+Kai botas veikia, seną aplanką ištrinkite:
+
+```bash
+sudo rm -r /home/piagent/telegram-agent.old
+```
 
 ## Teisių patikra
 
@@ -383,158 +464,6 @@ EOF
 sudo chmod 644 /tmp/piagent-test.sh
 sudo systemd-run --wait --pipe --uid=piagent -p ProtectSystem=strict -p ReadWritePaths=/home/piagent -p ProtectHome=tmpfs -p BindPaths=/home/piagent -p InaccessiblePaths="/root /media /mnt /srv" bash /tmp/piagent-test.sh
 sudo rm /tmp/piagent-test.sh
-```
-
-## Naktinė konsolidacija
-
-Konsolidacija veikia kaip atskira paslauga, ne boto dalis. Papildomus apribojimus
-(`ProtectSystem` ir kitus) galite nukopijuoti iš `systemctl cat piagent.service`. Failuose turi
-būti visos sekcijos, kitaip `systemctl` rodo `bad unit file setting` arba `no installation config`.
-
-Paslauga:
-
-```bash
-sudo systemctl edit --force --full piagent-consolidate.service
-```
-
-```ini
-[Unit]
-Description=Nightly memory consolidation
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-User=piagent
-Group=piagent
-EnvironmentFile=/etc/piagent/env
-WorkingDirectory=/home/piagent/telegram-agent
-ExecStart=/home/piagent/telegram-agent/venv/bin/python -m agent.consolidate
-```
-
-Sekcijos `[Install]` nėra, nes paslaugą paleidžia laikmatis. `EnvironmentFile` būtinas: be jo
-matysite `OpenAIError "Missing credentials"`, nes Raspberry Pi `.env` failo nėra.
-
-Laikmatis:
-
-```bash
-sudo systemctl edit --force --full piagent-consolidate.timer
-```
-
-```ini
-[Unit]
-Description=Nightly memory consolidation timer
-
-[Timer]
-OnCalendar=*-*-* 03:00:00 Europe/Vilnius
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-```
-
-Konsolidacija vyksta 03:00, 30 minučių prieš atsarginę kopiją 03:30, kad įrašai patektų į tos
-nakties kopiją. Laikas nurodytas su zona, kitaip `OnCalendar` naudoja sistemos zoną.
-
-Įjunkite ir patikrinkite. Paskutinė komanda turi rodyti artimiausią 03:00 EEST arba EET.
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now piagent-consolidate.timer
-systemctl list-timers piagent-consolidate.timer
-```
-
-Paleiskite bandymą dabar. Pabaigoje turi būti `Naktine konsolidacija baigta`. Pranešimas
-`zinuciu nera` reiškia, kad per parą pokalbių nebuvo.
-
-```bash
-sudo systemctl start piagent-consolidate.service
-sudo journalctl -u piagent-consolidate.service -n 15 --no-pager
-```
-
-| Klaida | Priežastis |
-|---|---|
-| `Refusing to start, unit ... not loaded` | Nėra `.service` failo tuo pačiu pavadinimu |
-| `bad unit file setting` | Trūksta sekcijų. Patikra: `sudo systemd-analyze verify /etc/systemd/system/piagent-consolidate.timer` |
-| `Missing credentials` | Trūksta `EnvironmentFile=/etc/piagent/env` |
-
-`Persistent=true` po įjungimo gali paleisti papildomą praleistą paleidimą. Tai nekenksminga.
-
-## Savaitinė duomenų priežiūra
-
-Kas sekmadienį 03:15, tarp konsolidacijos (03:00) ir atsarginės kopijos (03:30), paleidžiamas
-modulis `agent.maintenance`. Jis:
-
-1. Ištrina senesnes nei 120 dienų žinutes, bet tik tas, kurios jau sutrauktos į santrauką.
-   Nesutrauktos žinutės lieka bet kokio amžiaus, o faktai apie vartotoją netrinami.
-2. Ištrina užbaigtus patvirtinimus (patvirtintus, atmestus, pasibaigusius), senesnius nei 30 dienų.
-3. Ištrina išsiųstus ir neišsiųstus (nepasiekusius gavėjo) priminimus, senesnius nei 30 dienų.
-   Laukiantys priminimai ir užrašai netrinami.
-4. Iš žurnalo `journal.jsonl` pašalina senesnes nei 90 dienų eilutes.
-5. Suspaudžia duomenų bazę: `PRAGMA wal_checkpoint(TRUNCATE)`, `PRAGMA optimize` ir `VACUUM`.
-
-Pašalintų žinučių atkurti neįmanoma: botas jas atsimena tik iš santraukos ir faktų. Iki 14 dienų
-senumo duomenys dar yra atsarginėse kopijose.
-
-Paslauga:
-
-```bash
-sudo systemctl edit --force --full piagent-maintenance.service
-```
-
-```ini
-[Unit]
-Description=Weekly database and log maintenance
-
-[Service]
-Type=oneshot
-User=piagent
-Group=piagent
-EnvironmentFile=/etc/piagent/env
-WorkingDirectory=/home/piagent/telegram-agent
-ExecStart=/home/piagent/telegram-agent/venv/bin/python -m agent.maintenance
-```
-
-Laikmatis:
-
-```bash
-sudo systemctl edit --force --full piagent-maintenance.timer
-```
-
-```ini
-[Unit]
-Description=Weekly database and log maintenance timer
-
-[Timer]
-OnCalendar=Sun *-*-* 03:15:00 Europe/Vilnius
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-```
-
-Jei naudojate [šifruotą diską](#duomenų-šifravimas-luks), neleiskite priežiūrai veikti, kol diskas
-neatrakintas:
-
-```bash
-sudo mkdir -p /etc/systemd/system/piagent-maintenance.service.d
-printf '[Unit]\nConditionPathIsMountPoint=/home/piagent/data\n' \
-  | sudo tee /etc/systemd/system/piagent-maintenance.service.d/encrypted-data.conf > /dev/null
-```
-
-Įjunkite ir patikrinkite. Paskutinė komanda turi rodyti artimiausią sekmadienį 03:15.
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now piagent-maintenance.timer
-systemctl list-timers piagent-maintenance.timer
-```
-
-Paleiskite bandymą dabar. Pabaigoje turi būti `Duomenų priežiūra baigta` su ištrintų įrašų skaičiais.
-
-```bash
-sudo systemctl start piagent-maintenance.service
-sudo journalctl -u piagent-maintenance.service -n 10 --no-pager
 ```
 
 ## Duomenų šifravimas (LUKS)
@@ -757,8 +686,8 @@ ir `piagent-unlock` dar nepaleistas, 03:30 kopija nepavyks.
 
 ### Rankinė kopija
 
-Kodo kopija yra GitHub. Joje nėra `/etc/piagent/env` (raktų), `/etc/systemd/system/piagent.service`
-ir `venv`: raktus saugokite slaptažodžių tvarkyklėje, o paslaugą ir `venv` atkurkite pagal šį gidą.
+Kodo ir paslaugų failų (`deploy/`) kopija yra GitHub. Joje nėra `/etc/piagent/env` (raktų) ir
+`venv`: raktus saugokite slaptažodžių tvarkyklėje, o `venv` atkurkite pagal šį gidą.
 
 Pilna duomenų kopija šifruojama `gpg`. Komanda paprašys du kartus įvesti kopijos slaptažodį:
 

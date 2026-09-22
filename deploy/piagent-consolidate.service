@@ -1,0 +1,12 @@
+[Unit]
+Description=Nightly memory consolidation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=piagent
+Group=piagent
+EnvironmentFile=/etc/piagent/env
+WorkingDirectory=/home/piagent/telegram-agent
+ExecStart=/home/piagent/telegram-agent/venv/bin/python -m agent.consolidate

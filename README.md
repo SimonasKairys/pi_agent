@@ -69,6 +69,7 @@ Everything else is plain text: the bot understands requests such as "Primink ryt
 | `agent/db.py` | SQLite storage, usage tracking, and limits |
 | `agent/journal.py` | JSONL run log with API keys and email addresses scrubbed |
 | `backup/` | Standalone encrypted backup script |
+| `deploy/` | systemd service and timer files for the Raspberry Pi |
 | `scripts/metrics.py` | Success rate, tool usage, and cost metrics from the run log |
 
 ## Requirements
