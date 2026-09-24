@@ -223,7 +223,7 @@ The service files are in the project folder `deploy/`. This step installs all of
 the nightly memory job, and the weekly maintenance job. Run:
 
 ```bash
-sudo install -m 644 -t /etc/systemd/system /home/piagent/telegram-agent/deploy/piagent*.service /home/piagent/telegram-agent/deploy/piagent*.timer
+sudo sh -c 'install -m 644 -t /etc/systemd/system /home/piagent/telegram-agent/deploy/piagent*.service /home/piagent/telegram-agent/deploy/piagent*.timer'
 sudo systemd-analyze verify /etc/systemd/system/piagent*.service /etc/systemd/system/piagent*.timer
 ```
 

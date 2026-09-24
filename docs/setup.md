@@ -257,9 +257,12 @@ juos visus iš karto: boto paslaugą, naktinę konsolidaciją, savaitinę priež
 kopijas.
 
 ```bash
-sudo install -m 644 -t /etc/systemd/system /home/piagent/telegram-agent/deploy/piagent*.service /home/piagent/telegram-agent/deploy/piagent*.timer
+sudo sh -c 'install -m 644 -t /etc/systemd/system /home/piagent/telegram-agent/deploy/piagent*.service /home/piagent/telegram-agent/deploy/piagent*.timer'
 sudo systemd-analyze verify /etc/systemd/system/piagent*.service /etc/systemd/system/piagent*.timer
 ```
+
+`sudo sh -c` reikalingas, nes jūsų vartotojas negali skaityti `/home/piagent`. Be jo apvalkalas
+neišplėstų `*` ir `install` praneštų `cannot stat`.
 
 Jei antroji komanda nieko neišveda, failai geri. Jei dar neįdiegėte
 [atsarginių kopijų](#atsarginės-kopijos) skripto, pranešimas apie
@@ -389,7 +392,7 @@ Jei `pull` nepavyksta dėl vietinių pakeitimų, patikrinkite
 Jei `pull` išvestyje matote `deploy/`, įdiekite naujus paslaugų failus:
 
 ```bash
-sudo install -m 644 -t /etc/systemd/system /home/piagent/telegram-agent/deploy/piagent*.service /home/piagent/telegram-agent/deploy/piagent*.timer
+sudo sh -c 'install -m 644 -t /etc/systemd/system /home/piagent/telegram-agent/deploy/piagent*.service /home/piagent/telegram-agent/deploy/piagent*.timer'
 sudo systemctl daemon-reload
 ```
 
@@ -443,7 +446,7 @@ Jei senos aplinkos nėra, ją sukurkite pagal skyrių [Python aplinka](#python-a
 Įdiekite paslaugų failus ir paleiskite botą:
 
 ```bash
-sudo install -m 644 -t /etc/systemd/system /home/piagent/telegram-agent/deploy/piagent*.service /home/piagent/telegram-agent/deploy/piagent*.timer
+sudo sh -c 'install -m 644 -t /etc/systemd/system /home/piagent/telegram-agent/deploy/piagent*.service /home/piagent/telegram-agent/deploy/piagent*.timer'
 sudo systemctl daemon-reload
 sudo systemctl start piagent
 sudo systemctl is-active piagent
@@ -755,6 +758,17 @@ python3 -m venv /tmp/piagent-oauth
 ```
 
 Jei atsisiuntėte kliento JSON failą, jo kelią galite nurodyti kaip argumentą.
+
+Tokeną galima gauti ir tiesiai Raspberry Pi. Tada skriptas parodo adresą, kurį atidarote bet kurio
+įrenginio naršyklėje. Po prisijungimo naršyklė praneša, kad `localhost` nepasiekiamas. Nukopijuokite
+visą adresą iš adreso juostos ir įklijuokite į Pi terminalą. Skriptas pats įrašo raktus į
+`backup.env`:
+
+```bash
+sudo /usr/local/lib/piagent-backup/venv/bin/python /home/piagent/telegram-agent/backup/authorize.py --headless --env-file /etc/piagent/backup.env
+```
+
+Kai skriptas klausia `GOOGLE_CLIENT_ID`, paspauskite **Enter**, kad liktų esamas ID.
 
 Jei naršyklė rodo „Google hasn't verified this app“, spustelėkite **Advanced** ir
 **Go to ... (unsafe)**: tai jūsų pačių programa.

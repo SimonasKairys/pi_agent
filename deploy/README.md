@@ -4,7 +4,7 @@ Unit files for the Raspberry Pi deployment. Install them as `root` with the comm
 [the deployment guide](../docs/setup.md#systemd-paslauga):
 
 ```bash
-sudo install -m 644 -t /etc/systemd/system /home/piagent/telegram-agent/deploy/piagent*.service /home/piagent/telegram-agent/deploy/piagent*.timer
+sudo sh -c 'install -m 644 -t /etc/systemd/system /home/piagent/telegram-agent/deploy/piagent*.service /home/piagent/telegram-agent/deploy/piagent*.timer'
 sudo systemctl daemon-reload
 ```
 
