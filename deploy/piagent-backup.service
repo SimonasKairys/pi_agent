@@ -1,0 +1,19 @@
+[Unit]
+Description=Encrypted database backup to Google Drive
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Runs as root: the piagent user must not read the backup keys in backup.env.
+EnvironmentFile=/etc/piagent/backup.env
+ExecStart=/usr/local/lib/piagent-backup/venv/bin/python /usr/local/lib/piagent-backup/backup.py
+
+ProtectSystem=full
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077

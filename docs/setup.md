@@ -253,14 +253,17 @@ sudo journalctl -u piagent -n 20 --no-pager
 ## systemd paslauga
 
 Paslaugų failai yra projekto aplanke `deploy/`, todėl jų kopijuoti iš šio gido nereikia. Įdiekite
-juos visus iš karto: boto paslaugą, naktinę konsolidaciją ir savaitinę priežiūrą.
+juos visus iš karto: boto paslaugą, naktinę konsolidaciją, savaitinę priežiūrą ir atsargines
+kopijas.
 
 ```bash
 sudo install -m 644 -t /etc/systemd/system /home/piagent/telegram-agent/deploy/piagent*.service /home/piagent/telegram-agent/deploy/piagent*.timer
 sudo systemd-analyze verify /etc/systemd/system/piagent*.service /etc/systemd/system/piagent*.timer
 ```
 
-Jei antroji komanda nieko neišveda, failai geri.
+Jei antroji komanda nieko neišveda, failai geri. Jei dar neįdiegėte
+[atsarginių kopijų](#atsarginės-kopijos) skripto, pranešimas apie
+`/usr/local/lib/piagent-backup/venv/bin/python` yra tikėtinas.
 
 `install` failus nukopijuoja, o ne susieja. Susieti nevalia: projekto aplankas priklauso
 `piagent`, todėl botas galėtų perrašyti savo paslaugą ir panaikinti jos apribojimus.
@@ -388,6 +391,12 @@ Jei `pull` išvestyje matote `deploy/`, įdiekite naujus paslaugų failus:
 ```bash
 sudo install -m 644 -t /etc/systemd/system /home/piagent/telegram-agent/deploy/piagent*.service /home/piagent/telegram-agent/deploy/piagent*.timer
 sudo systemctl daemon-reload
+```
+
+Jei matote `backup/backup.py`, įdiekite naują kopijavimo skriptą:
+
+```bash
+sudo install -o root -g root -m 755 /home/piagent/telegram-agent/backup/backup.py /usr/local/lib/piagent-backup/backup.py
 ```
 
 Jei matote `requirements.txt`, atnaujinkite bibliotekas:
@@ -709,6 +718,63 @@ Parašykite botui žinutę ir pakartokite `messages` skaičiavimą: skaičius tu
 įvykis lieka `events` lentelėje su užpildytu `deleted_at` (minkštas trynimas).
 
 ## Atsarginės kopijos
+
+Skriptas `backup/backup.py` kas naktį 03:30 padaro duomenų bazės kopiją, užšifruoja ją `gpg` ir
+įkelia į Google Drive. Senesnes nei 14 dienų kopijas jis ištrina. Skriptas veikia kaip `root` iš
+atskiro katalogo, kad botas negalėtų perskaityti kopijavimo raktų ar pakeisti skripto.
+
+### Skripto diegimas
+
+```bash
+sudo apt install -y gnupg
+sudo install -d -o root -g root -m 755 /usr/local/lib/piagent-backup
+sudo install -o root -g root -m 755 /home/piagent/telegram-agent/backup/backup.py /usr/local/lib/piagent-backup/backup.py
+sudo python3 -m venv /usr/local/lib/piagent-backup/venv
+sudo /usr/local/lib/piagent-backup/venv/bin/python -m pip install -r /home/piagent/telegram-agent/backup/requirements.txt
+```
+
+Raktus įrašykite į `/etc/piagent/backup.env`. `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` ir
+`GOOGLE_REFRESH_TOKEN` gaunami iš Google Cloud OAuth kliento su įjungtu Drive API ir leidimu
+`https://www.googleapis.com/auth/drive.file`. `PIAGENT_DB_PATH` turi sutapti su boto
+`/etc/piagent/env` reikšme, kitaip skriptas duomenų bazės neras.
+
+```bash
+sudo tee /etc/piagent/backup.env > /dev/null <<'EOF'
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REFRESH_TOKEN=
+BACKUP_FOLDER_ID=
+BACKUP_PASSPHRASE=
+PIAGENT_DB_PATH=/home/piagent/data/db/agent.db
+EOF
+sudo chown root:root /etc/piagent/backup.env
+sudo chmod 600 /etc/piagent/backup.env
+sudo nano /etc/piagent/backup.env
+```
+
+Jei šifravimo neatlikote, `PIAGENT_DB_PATH` yra `/home/piagent/data/agent.db`.
+`BACKUP_PASSPHRASE` išsaugokite slaptažodžių tvarkyklėje: be jo kopijos neatkuriamos.
+
+### Kasnaktinis kopijavimas
+
+Paslaugos ir laikmačio failus įdiegėte kartu su [systemd paslauga](#systemd-paslauga). Pirmiausia
+paleiskite kopijavimą ranka ir patikrinkite žurnalą. Paskutinė eilutė turi būti
+`Atsarginė kopija sėkmingai atlikta.`, o kopija turi atsirasti Google Drive kataloge.
+
+```bash
+sudo systemctl start piagent-backup.service
+sudo journalctl -u piagent-backup -n 20 --no-pager
+```
+
+Tada įjunkite laikmatį. Paskutinė komanda turi rodyti artimiausią 03:30.
+
+```bash
+sudo systemctl enable --now piagent-backup.timer
+systemctl list-timers --no-pager 'piagent-*'
+```
+
+Jei Raspberry Pi 03:30 buvo išjungtas, laikmatis kopiją paleidžia iškart po įjungimo
+(`Persistent=true`). Šifruotame diske ji nepavyks, nes diskas tuo metu dar užrakintas.
 
 ### Kopijavimo teisių patikra
 

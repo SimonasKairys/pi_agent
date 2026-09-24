@@ -1,0 +1,9 @@
+[Unit]
+Description=Nightly encrypted database backup timer
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 Europe/Vilnius
+Persistent=true
+
+[Install]
+WantedBy=timers.target
