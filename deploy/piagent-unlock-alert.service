@@ -1,0 +1,33 @@
+[Unit]
+Description=Telegram alert while the encrypted bot data is locked
+After=network-online.target
+Wants=network-online.target
+# Sends nothing once the disk is unlocked. Enable only with the encrypted data setup.
+ConditionPathIsMountPoint=!/home/piagent/data
+
+[Service]
+# exec, not oneshot: retries can take minutes and must not hold up boot
+Type=exec
+User=piagent
+Group=piagent
+EnvironmentFile=/etc/piagent/env
+WorkingDirectory=/home/piagent/telegram-agent
+ExecStart=/home/piagent/telegram-agent/venv/bin/python -m agent.unlock_alert
+
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+PrivateDevices=true
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

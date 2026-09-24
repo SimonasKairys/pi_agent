@@ -34,7 +34,8 @@ talks to each user in Lithuanian (the default) or English, set per user in `user
 - **Prompt-injection defense**: tool results, calendar event text, search results, and stored
   facts are wrapped and treated as data, not instructions.
 - **Encryption at rest**: an optional setup keeps the database, logs, and `users.toml` in a LUKS2
-  container that you unlock with a passphrase after each reboot.
+  container that you unlock with a passphrase after each reboot. An optional service sends a
+  Telegram alert while the data is locked.
 - **Backups**: an optional script encrypts the SQLite database with `gpg` and uploads it to
   Google Drive with 14-day retention.
 

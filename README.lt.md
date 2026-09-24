@@ -35,7 +35,8 @@ vartotoju pagalbininkas kalba lietuviškai (numatytoji kalba) arba angliškai, p
 - **Apsauga nuo raginimo injekcijų**: įrankių rezultatai, kalendoriaus įvykių tekstas, paieškos
   rezultatai ir išsaugoti faktai laikomi duomenimis, ne nurodymais.
 - **Duomenų šifravimas**: nebūtina sąranka duomenų bazę, žurnalą ir `users.toml` laiko LUKS2
-  konteineryje, kurį po kiekvieno perkrovimo atrakinate slaptažodžiu.
+  konteineryje, kurį po kiekvieno perkrovimo atrakinate slaptažodžiu. Kol duomenys užrakinti,
+  nebūtina paslauga atsiunčia įspėjimą per Telegram.
 - **Atsarginės kopijos**: nebūtinas skriptas šifruoja SQLite duomenų bazę su `gpg` ir įkelia ją į
   Google Drive, kopijas saugodamas 14 dienų.
 

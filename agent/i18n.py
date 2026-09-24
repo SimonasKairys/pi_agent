@@ -142,6 +142,11 @@ Komandos:
         "reminders_none": "Laukiančių priminimų nėra.",
         "reminder_to_user": "(vartotojui {name})",
         "reminder_from_user": "(nuo {name})",
+        # Boot alert (agent/unlock_alert.py)
+        "unlock_alert": (
+            "⚠️ Raspberry Pi persikrovė, o šifruotas diskas užrakintas, todėl botas neveikia.\n"
+            "Prisijunkite prie Pi ir paleiskite: sudo piagent-unlock"
+        ),
     },
     "en": {
         "start": (
@@ -261,6 +266,11 @@ Commands:
         "reminders_none": "No pending reminders.",
         "reminder_to_user": "(for {name})",
         "reminder_from_user": "(from {name})",
+        # Boot alert (agent/unlock_alert.py)
+        "unlock_alert": (
+            "⚠️ The Raspberry Pi restarted and the encrypted disk is locked, so the bot is down.\n"
+            "Sign in to the Pi and run: sudo piagent-unlock"
+        ),
     },
 }
 

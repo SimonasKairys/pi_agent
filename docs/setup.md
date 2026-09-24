@@ -622,6 +622,48 @@ SD kortelėse `shred` negarantuoja, kad seni duomenys išnyks fiziškai, nes kor
 įrašus paskirsto savaip. Jei kortelėje ilgai buvo jautrių duomenų, saugiausia sistemą perkelti į
 naują kortelę ir senąją sunaikinti.
 
+### 10. Įspėjimas per Telegram, kai diskas užrakintas
+
+Šis žingsnis nebūtinas, bet rekomenduojamas. Po netikėto perkrovimo, pavyzdžiui, dingus elektrai,
+botas neveikia, kol neatrakinate disko. Paslauga `piagent-unlock-alert` po paleidimo patikrina, ar
+diskas prijungtas. Jei ne, ji per Telegram atsiunčia žinutę su priminimu paleisti
+`sudo piagent-unlock`. Nepavykus prisijungti prie tinklo, ji bando iš naujo apie 10 minučių. Jei
+diskas jau atrakintas, žinutė nesiunčiama.
+
+Po perkrovimo `users.toml` užrakintas, todėl gavėjų ID ir kalba laikomi `/etc/piagent/env`.
+Paprastai užtenka administratoriaus ID. Jį rasite `users.toml` lauke `telegram_id`:
+
+```bash
+sudo grep telegram_id /home/piagent/data/users.toml
+```
+
+Įrašykite ID ir kalbą (`lt` arba `en`). Kelis ID atskirkite kableliais.
+
+```bash
+sudo tee -a /etc/piagent/env > /dev/null <<'EOF'
+PIAGENT_UNLOCK_ALERT_CHAT_IDS=111111111
+PIAGENT_UNLOCK_ALERT_LANGUAGE=lt
+EOF
+```
+
+Įdiekite ir įjunkite paslaugą:
+
+```bash
+sudo install -m 644 -t /etc/systemd/system /home/piagent/telegram-agent/deploy/piagent-unlock-alert.service
+sudo systemctl daemon-reload
+sudo systemctl enable piagent-unlock-alert.service
+```
+
+Be šifravimo šios paslaugos neįjunkite: tada `/home/piagent/data` nėra atskiras prijungimo taškas,
+ir žinutė ateitų po kiekvieno perkrovimo.
+
+Patikrinkite perkraudami Raspberry Pi su `sudo reboot`. Per kelias minutes turi ateiti žinutė. Jei
+ji neatėjo, prisijunkite ir peržiūrėkite žurnalą:
+
+```bash
+journalctl -b -u piagent-unlock-alert
+```
+
 ### Kas lieka nešifruota
 
 - `/etc/piagent/env`: API raktai, prieinami tik `root`.

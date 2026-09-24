@@ -16,3 +16,4 @@ so a link would let the bot rewrite its own service and drop its restrictions.
 | `piagent.service` | The bot, with systemd restrictions |
 | `piagent-consolidate.service`, `.timer` | Nightly memory consolidation at 03:00 |
 | `piagent-maintenance.service`, `.timer` | Weekly cleanup on Sundays at 03:15 |
+| `piagent-unlock-alert.service` | Telegram alert while the encrypted data is locked. Enable it only with [data encryption](../docs/setup.md#10-įspėjimas-per-telegram-kai-diskas-užrakintas) |
