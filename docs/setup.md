@@ -733,9 +733,33 @@ sudo python3 -m venv /usr/local/lib/piagent-backup/venv
 sudo /usr/local/lib/piagent-backup/venv/bin/python -m pip install -r /home/piagent/telegram-agent/backup/requirements.txt
 ```
 
-Raktus įrašykite į `/etc/piagent/backup.env`. `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` ir
-`GOOGLE_REFRESH_TOKEN` gaunami iš Google Cloud OAuth kliento su įjungtu Drive API ir leidimu
-`https://www.googleapis.com/auth/drive.file`. `PIAGENT_DB_PATH` turi sutapti su boto
+Google raktams reikia Google Cloud projekto su įjungtu Google Drive API:
+
+1. **Google Auth Platform** > **Branding** užpildykite programos pavadinimą, el. paštą, pagrindinio
+   puslapio ir privatumo politikos adresus. Logotipo neįkelkite: su juo Google reikalauja patikros.
+2. **Data Access** pridėkite tik leidimą `https://www.googleapis.com/auth/drive.file`.
+3. **Audience** spustelėkite **Publish app**. Būsena turi būti **In production**. Testavimo
+   režimu (**Testing**) `GOOGLE_REFRESH_TOKEN` galioja tik 7 dienas, ir kopijavimas nustoja veikti.
+4. **Clients** sukurkite **Desktop app** tipo klientą. Kliento ID ir paslaptį (**Client secret**)
+   išsaugokite slaptažodžių tvarkyklėje: vėliau Google paslapties nebeparodo, galima tik pridėti
+   naują (**Add secret**).
+
+Tokeną gaukite kompiuteryje su naršykle, ne Raspberry Pi. Skriptas paklausia kliento ID ir
+paslapties (paslaptis ekrane nerodoma), atidaro Google prisijungimą ir išveda `GOOGLE_CLIENT_ID`,
+`GOOGLE_CLIENT_SECRET` ir `GOOGLE_REFRESH_TOKEN`:
+
+```bash
+python3 -m venv /tmp/piagent-oauth
+/tmp/piagent-oauth/bin/python -m pip install google-auth-oauthlib
+/tmp/piagent-oauth/bin/python backup/authorize.py
+```
+
+Jei atsisiuntėte kliento JSON failą, jo kelią galite nurodyti kaip argumentą.
+
+Jei naršyklė rodo „Google hasn't verified this app“, spustelėkite **Advanced** ir
+**Go to ... (unsafe)**: tai jūsų pačių programa.
+
+Raktus įrašykite į `/etc/piagent/backup.env`. `PIAGENT_DB_PATH` turi sutapti su boto
 `/etc/piagent/env` reikšme, kitaip skriptas duomenų bazės neras.
 
 ```bash
