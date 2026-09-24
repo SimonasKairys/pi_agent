@@ -8,6 +8,12 @@ Sistemą į SD kortelę įrašykite su [Raspberry Pi Imager](https://www.raspber
 **Choose OS** > **Other general-purpose OS** > **Ubuntu** > **Ubuntu Server 24.04 LTS (64-bit)**.
 Nustatymuose įjunkite SSH ir nurodykite vartotojo vardą, slaptažodį ir Wi-Fi.
 
+Raspberry Pi 5 reikia 5,1 V ir 5 A maitinimo šaltinio, pavyzdžiui, oficialaus
+[27 W USB-C šaltinio](https://www.raspberrypi.com/products/27w-power-supply/). Jei prisijungus
+matote `This power supply is not capable of supplying 5A`, šaltinis per silpnas, o įtampos kritimai
+gali netikėtai perkrauti Pi. Įtampą patikrinsite komanda `vcgencmd get_throttled`: turi būti
+`throttled=0x0`. Jei komanda nerasta, įdiekite ją su `sudo apt install libraspberrypi-bin`.
+
 Komandas vykdykite po vieną.
 
 ## Turinys
@@ -675,6 +681,36 @@ ji neatėjo, prisijunkite ir peržiūrėkite žurnalą:
 ```bash
 journalctl -b -u piagent-unlock-alert
 ```
+
+### 11. Nuotolinis atrakinimas per Tailscale
+
+Kad diską galėtumėte atrakinti ne namuose, prie Pi junkitės per [Tailscale](https://tailscale.com/).
+Tai privatus tinklas tarp jūsų įrenginių: maršrutizatoriuje nereikia atidaryti prievadų, o Pi
+internete nematomas. Neatidarykite SSH prievado 22 maršrutizatoriuje: jį nuolat bando nulaužti
+automatiniai skeneriai.
+
+Įdiekite Tailscale ir prisijunkite. `tailscale up` parodo adresą, kurį reikia atidaryti naršyklėje:
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+tailscale ip -4
+```
+
+Paskutinė komanda parodo Pi adresą, prasidedantį `100.`. Jis nesikeičia. Tailscale pasileidžia su
+sistema ir nuo šifruoto disko nepriklauso, todėl veikia ir tada, kai botas laukia atrakinimo.
+
+Įrenginio raktas pagal numatymą baigia galioti po 180 dienų, ir tada prieiga dingsta.
+[Tailscale administravimo konsolėje](https://login.tailscale.com/admin/machines) prie Pi
+spustelėkite **...** > **Disable key expiry**.
+
+Telefone įdiekite Tailscale programėlę ir prisijunkite ta pačia paskyra. SSH programėlė gali būti
+ConnectBot (Android, nemokama) arba Termius (iOS ir Android, nemokamo plano pakanka). Prisijungime
+nurodykite `admin@100.x.x.x`, kur `admin` yra jūsų Pi vartotojas, o adresas iš `tailscale ip -4`.
+
+Patikrinkite prieš prireikiant: telefone išjunkite Wi-Fi, prisijunkite per mobilųjį internetą ir
+paleiskite `sudo piagent-unlock`. Gavę [įspėjimą per Telegram](#10-įspėjimas-per-telegram-kai-diskas-užrakintas),
+darykite tą patį.
 
 ### Kas lieka nešifruota
 
