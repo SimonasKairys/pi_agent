@@ -8,11 +8,15 @@ Sistemą į SD kortelę įrašykite su [Raspberry Pi Imager](https://www.raspber
 **Choose OS** > **Other general-purpose OS** > **Ubuntu** > **Ubuntu Server 24.04 LTS (64-bit)**.
 Nustatymuose įjunkite SSH ir nurodykite vartotojo vardą, slaptažodį ir Wi-Fi.
 
-Raspberry Pi 5 reikia 5,1 V ir 5 A maitinimo šaltinio, pavyzdžiui, oficialaus
-[27 W USB-C šaltinio](https://www.raspberrypi.com/products/27w-power-supply/). Jei prisijungus
-matote `This power supply is not capable of supplying 5A`, šaltinis per silpnas, o įtampos kritimai
-gali netikėtai perkrauti Pi. Įtampą patikrinsite komanda `vcgencmd get_throttled`: turi būti
-`throttled=0x0`. Jei komanda nerasta, įdiekite ją su `sudo apt install libraspberrypi-bin`.
+Raspberry Pi 5 rekomenduojamas 5,1 V ir 5 A maitinimo šaltinis, pavyzdžiui, oficialus
+[27 W USB-C šaltinis](https://www.raspberrypi.com/products/27w-power-supply/). Prisijungus galite
+matyti pranešimą `This power supply is not capable of supplying 5A`. Jis reiškia tik tai, kad
+šaltinis per USB-PD nepranešė apie 5 A, todėl Pi riboja srovę USB įrenginiams. Tai nebūtinai
+sukelia įtampos kritimus.
+
+Ar įtampa krito, patikrinsite komanda `vcgencmd get_throttled`: turi būti `throttled=0x0`. Jei
+komanda nerasta, įdiekite ją su `sudo apt install libraspberrypi-bin`. Kita reikšmė reiškia įtampos
+kritimus. Tada pakeiskite maitinimo šaltinį, nes kritimai gali netikėtai perkrauti Pi.
 
 Komandas vykdykite po vieną.
 
