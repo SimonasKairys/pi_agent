@@ -120,6 +120,44 @@ def test_create_event_success(setup_db, test_users):
     assert usage["events_created"] == 1
 
 
+def test_create_event_without_attendees_invites_requester(setup_db):
+    conn = setup_db
+    fake_client = FakeComposioClient(google_id="g_evt_solo")
+
+    res = create_event(
+        title="Sporto treniruotė",
+        start="2026-09-25T18:00",
+        end="2026-09-25T19:30",
+        attendees=[],
+        conn=conn,
+        user_id=102,
+        composio_client=fake_client,
+    )
+
+    # Without attendees the event would stay only in the bot's calendar.
+    assert fake_client.last_arguments["attendees"] == ["ruta@example.com"]
+    assert "dalyviai: Ruta" in res
+    att = conn.execute("SELECT user_id FROM event_attendees WHERE event_id = 1").fetchall()
+    assert [a["user_id"] for a in att] == [102]
+
+
+def test_create_event_with_attendees_does_not_add_requester(setup_db):
+    conn = setup_db
+    fake_client = FakeComposioClient(google_id="g_evt_other")
+
+    create_event(
+        title="Susitikimas",
+        start="2026-09-25T10:00",
+        end="2026-09-25T11:00",
+        attendees=["Tomas"],
+        conn=conn,
+        user_id=102,
+        composio_client=fake_client,
+    )
+
+    assert fake_client.last_arguments["attendees"] == ["tomas@example.com"]
+
+
 def test_create_event_four_required_parameters(setup_db):
     conn = setup_db
     fake_client = FakeComposioClient(google_id="g_evt_params")

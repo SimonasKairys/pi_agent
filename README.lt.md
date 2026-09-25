@@ -10,7 +10,8 @@ vartotoju pagalbininkas kalba lietuviškai (numatytoji kalba) arba angliškai, p
 
 - **Kalendorius**: rodo, kuria, keičia ir trina Google Calendar įvykius per
   [Composio](https://composio.dev). Kviečia tik žmones iš `users.toml`, įskaitant svečius, kurie
-  botu nesinaudoja.
+  botu nesinaudoja. Jei prašyme dalyvių nėra, botas pakviečia patį prašantįjį, todėl įvykis
+  atsiranda ir jo kalendoriuje.
 - **Paieška internete**: naudoja [Tavily](https://tavily.com) su ribotu rezultatų skaičiumi ir
   ištraukų ilgiu.
 - **Paieška YouTube** (nebūtina): randa vaizdo įrašus per

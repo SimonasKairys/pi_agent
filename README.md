@@ -10,7 +10,8 @@ talks to each user in Lithuanian (the default) or English, set per user in `user
 
 - **Calendar**: lists, creates, updates, and deletes Google Calendar events through
   [Composio](https://composio.dev). Invite only people listed in `users.toml`, including guests
-  who don't use the bot.
+  who don't use the bot. If a request names no one, the bot invites the person who asked, so the
+  event appears in their own calendar.
 - **Web search**: uses [Tavily](https://tavily.com) with capped result counts and snippet lengths.
 - **YouTube search** (optional): finds videos with the
   [YouTube Data API](https://developers.google.com/youtube/v3) and returns titles, channels, dates,

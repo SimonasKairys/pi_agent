@@ -390,7 +390,8 @@ def create_event(
 ) -> str:
     """Creates a calendar event and sends invitations to authorized attendees.
 
-    Requires attendees to be users or guests listed in users.toml.
+    Requires attendees to be users or guests listed in users.toml. Without attendees,
+    invites the requesting user so the event appears in their own calendar.
     Enforces per-user daily event creation limits.
     Sets send_updates='all', guests_can_invite_others=False,
     guests_can_see_other_guests=False, and create_meeting_room=False.
@@ -411,6 +412,19 @@ def create_event(
 
     # Validate attendees: each must be a user or a guest listed in users.toml
     attendee_emails, attendee_user_ids, attendee_guest_names = _resolve_attendees(attendees)
+
+    # Be dalyvių įvykis liktų tik bendrame boto kalendoriuje, todėl kviečiame patį
+    # vartotoją: taip įvykis atsiranda ir jo Google kalendoriuje.
+    if not attendee_emails:
+        try:
+            requester = get_user_by_id(user_id)
+        except UnknownUserError as e:
+            raise ValueError("Nepavyko rasti vartotojo, kuriam kurti įvykį") from e
+        except ConfigError as e:
+            raise ValueError(f"Klaidinga vartotojų konfigūracija: {e}") from e
+        attendees = [requester.name]
+        attendee_emails = [requester.email]
+        attendee_user_ids = [requester.telegram_id]
 
     dt_start = parse_date_input(start, timezone_name=timezone_str, is_end_of_day=False)
     dt_end = parse_date_input(end, timezone_name=timezone_str, is_end_of_day=False)
@@ -560,7 +574,10 @@ CREATE_EVENT_TOOL = Tool(
             "attendees": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Dalyvių vardai (iš leistinų vartotojų ir svečių sąrašo, ne el. pašto adresai)",
+                "description": (
+                    "Dalyvių vardai (iš leistinų vartotojų ir svečių sąrašo, ne el. pašto adresai). "
+                    "Jei vartotojas dalyvių nenurodė, palik tuščią: kvietimą gaus pats vartotojas."
+                ),
             },
             "description": {
                 "type": "string",
